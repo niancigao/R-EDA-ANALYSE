@@ -1,0 +1,276 @@
+---
+title: 條狀圖 (Bar Plots) 
+author: Tony Chuo, NSYSU
+date: "`r Sys.time()`"
+output: 
+  html_document: 
+    theme: spacelab
+    highlight: pygments
+    css: ../etc/style.css
+---
+
+```{r echo=F, results='hide', message=FALSE, warning=FALSE}
+# Installation, setup & formatting. Do not modify this code chunk.  
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE) 
+options(scipen=20, digits=4, width=80, tibble.print_min=4)
+# rmarkdown::find_pandoc(version = '2.7.3')
+```
+
+<br><br><p class="wwl"><span style='font-size:24px'> 🏠 </span>
+<span style='font-size:18px;'>
+<b>學習重點：</b></span><br>
+&emsp; ■ 條狀圖簡單易懂，是很重要的的分析、溝通工具<br>
+&emsp; ■ 點狀圖通常用在比較各分析對象<br>
+&emsp; ■ 條狀圖主要用在分類比較<br>
+&emsp; ■  `ggplot`的三種條狀圖<br>
+&emsp; &emsp; ◇ `geom_bar()` : 類似 `barplot()` <br>
+&emsp; &emsp; ◇ `geom_col()` : 類似 `table() %>% barplot()` <br>
+&emsp; &emsp; ◇ `geom_histogram()` : `hist()` <br>
+&emsp; ■ 有兩個分類變數時，需要設定`position`來選擇比較的基礎<br>
+&emsp; &emsp; `"stack"` : 比較大類總數(堆疊) <br>
+&emsp; &emsp; `"dodge"` : 比較各細類數量(躲避、閃開) <br>
+&emsp; &emsp; `"fill"` :  比較細類比率(塗色)<br>
+</p class="wwl"><br>
+
+<br>
+
+
+### 1. 三種不一樣的條狀圖
+
+##### 1.1 準備資料
+
+載入 libraries，並預設繪圖參數
+```{r message=FALSE, warning=FALSE}
+pacman::p_load(dplyr,ggplot2,plotly,gridExtra)
+theme_set(theme_get() + theme(
+  text=element_text(size=8), legend.key.size=unit(10,"points")
+  ))
+```
+
+載入 comics 資料集
+```{r message=FALSE, warning=FALSE}
+D = read.csv("data/comics1.csv",stringsAsFactors=F) %>% as_tibble
+glimpse(D)
+```
+`tibble` 在 `dplyr` 中，被定義為增強型的資料框。
+
+
+##### 1.2 三種條狀圖
+
+🌻 `ggplot`之中，有三種條狀圖可以使用
+
++ **geom_histogram** 顯示連續變數的 <i>分布</i>。
++ **geom_bar** 顯示離散變數 的<i>計數</i> (<i>分布</i>)
++ **geom_col** 顯示 / 比較 不同類別間的統計數據。
+
+```{r fig.height=2, fig.width=6.5}
+g1 = ggplot(D, aes(x=year)) + geom_histogram(binwidth=10)
+g2 = ggplot(D, aes(x=align)) + geom_bar()
+g3 = group_by(D, sex) %>% 
+  summarise( casualty.ratio = mean(alive=="Deceased") ) %>%
+  ggplot(aes(x=sex, y=casualty.ratio)) + geom_col()
+grid.arrange(g1,g2,g3,nrow=1)  # align three plots in a row 
+
+#geom_col() 要自己算(選)Y，其他的會自動算成數量
+```
+
+🌻 這些條狀圖有助於我們做<z>分類比較</z>
+
++ 幾十年來，新角色的數量
++ 好人、壞人，以及中立角色的數量
++ 男性角色和女性角色平均的傷亡率
+
+<br><br>
+
+
+### 2. 兩類別、大類與細類比較
+
+只要在`aes()`之中將`fill`屬性對應到細類變數，
+我們就可以在條狀圖的大類之中，以顏色區分細類。
+
+```{r fig.height=2, fig.width=6}
+g1 = ggplot(D, aes(x=year, fill=publisher)) + geom_histogram(binwidth=10)
+g2 = ggplot(D, aes(x=align, fill=sex)) + geom_bar()
+grid.arrange(g1,g2,nrow=1)  # align three plots in a row 
+```
+
+<span style='font-size:14px; font-family:"Arial Black"'>
+<b><u>🚴 **EXERCISE :**</u></b></span>
+
+
+請試著修改以下程式碼來製作下面的圖表。
+
+```{r  fig.height=2, fig.width=3}
+# group_by(D, sex) %>% 
+#  summarise( casualty.ratio = mean(alive=="Deceased") ) %>%
+#  ggplot(aes(x=sex, y=casualty.ratio)) + geom_col()
+```
+
+```{r  fig.height=2, fig.width=3}
+group_by(D, sex, align) %>% 
+  summarise(casualty=mean(alive=="Deceased"), .groups="drop") %>%
+  ggplot(aes(x=sex, y=casualty, fill=align)) + geom_col()
+```
+<br>
+```{r  fig.height=2, fig.width=3}
+group_by(D, sex, align) %>% 
+  summarise(casualty=mean(alive=="Deceased")) %>%
+  ggplot(aes(x=sex, y=casualty, fill=align)) + geom_col()
+```
+<br>
+
+<span style='font-size:14px; font-family:"Arial Black"'>
+<b><u>❓ **QUIZ :**</u></b></span>
+
+根據以上圖表
+
+  + 你知道哪個性別有較多的「好人」角色嗎？
+  + 「男性中立角色要比女性中立角色來得多」，這句話是公平的嗎？
+
+
+<br><br>
+
+### 3. 比較的基礎
+
+##### 3.1 列聯表 (Contingency Table)
+
+類別間的比較是基於一種名為 <z>列聯表</z> 的資料結構。
+
+```{r}
+table(D$align, D$sex)
+```
+
+<br>
+
+##### 3.2 列聯表的長型資料格式
+
+然而，`ggplot` 並不採用表格型式。
+為了和 `aes()` 這一配對繪圖相容，
+我們需要準備 <z>長型資料格式</z> 的數據。
+
+在製作長型資料格式時，`count()` 比 `group_by() %>% summarise()` 更容易操作。
+```{r}
+count(D, align, sex)
+```
+
+<br>
+
+##### 3.3 設置 `position` 來改變比較的基礎
+
+透過在 geom_col() 中設置 `position` 這一參數，我們可以用不同方式排列和比較表格中的數據。
+
+```{r fig.height=1.8, fig.width=7}
+dx = count(D, align, sex)
+gg = lapply(c("stack","dodge","fill"), function(pos) {
+  ggplot(dx, aes(sex,n,fill=align)) + 
+    geom_col(position=pos, alpha=0.6) + labs(title=pos,y="")
+  }) 
+grid.arrange(grobs=gg, nrow=1)
+```
+
+🌻 不同的圖表有不同的用途...
+
++ `stack` 該數據強調性別的總合
++ `dodge` 比較表格中所有的數據
++ `fill` 將數據轉換為比例，以進行相對性的比較
+
+<br>
+
+<span style='font-size:14px; font-family:"Arial Black"'>
+<b><u>❓ **QUIZ :**</u></b></span><br>
+上述三個圖表中，哪個比較容易...
+
++ 依照性別分類，比較「中立」角色的數量
++ 依照性別分類，比較「中立」角色的比例
++ 比較各性別的總人數
+
+<br>
+
+<span style='font-size:14px; font-family:"Arial Black"'>
+<b><u>🚴 **EXERCISE :**</u></b></span><br>
+事實上，我們可以用完全相同的數據再繪製三個圖表。
+請試著修改以下程式碼來製作下面的圖表。
+
+```{r fig.height=1.8, fig.width=7}
+# gg = lapply(c("stack","dodge","fill"), function(pos) {
+#   ggplot(dx, aes(sex,n,fill=align)) + 
+#     geom_col(position=pos, alpha=0.6) + labs(title=pos,y="")
+#   }) 
+# grid.arrange(grobs=gg, nrow=1)
+```
+
+```{r  fig.height=1.8, fig.width=7}
+gg = lapply(c("stack","dodge","fill"), function(pos) {
+  ggplot(dx, aes(align,n,fill=sex)) + 
+    geom_col(position=pos, alpha=0.6) + labs(title=pos,y="")
+  })
+grid.arrange(grobs=gg, nrow=1)
+```
+<br><br>
+
+### 4. 條形圖的分析能力
+
+讓我們在 `D` 資料集中，新增一個名為 `decade` 的欄位。
+```{r}
+D = mutate(D, decade = (D$year -1900) %/% 10)
+table(D$decade)
+```
+
+##### 4.1 窗格功能 `facet`
+
+好壞人的數量如何隨年代而變 ❓ 
+好壞人數量的變化趨勢是否因性別、出版商而異 ❓ 
+
+`facet_grid(var1~var2)`可以就每一種(`v1`,`v2`)的組合畫一個窗格     
+```{r fig.height=3, fig.width=6}
+ggplot(D, aes(x=decade, fill=align)) + 
+  geom_bar() + facet_grid(sex~publisher)  
+```
+
+我們用兩行簡單的程式碼就可以回答這些看似複雜繁瑣的問題了！
+
+通常，比例會比數量更能反映出趨勢，欲把數字轉換為比例，
+我們只需要將 `position='fill` 放在 `geom_bar()` 中。
+```{r fig.height=3, fig.width=6}
+# here we convert `align` into a factor so we can 
+# re-order the align levels in a desirable way
+D2 = D %>% mutate(
+  align=factor(align,levels=c("Bad","Neutral","Good"))
+  ) %>% 
+  filter(decade >= 6) 
+ggplot(D2, aes(x=decade, fill=align)) + 
+  geom_bar(position="fill") +   
+  facet_grid(sex~publisher)
+```
+
+
+##### 4.2 比例 vs. 數量
+
+下面是一個條形圖，顯示了在不同頭髮顏色和不同眼睛顏色的搭配中，好人和壞人所佔的比例。
+```{r fig.height=4, fig.width=6}
+hx = count(D2, hair, sort=T)
+ex = count(D2, eye, sort=T)
+D2 %>% filter(
+  hair%in%hx$hair[1:3], eye%in%ex$eye[1:3], 
+  align!="Neutral") %>% 
+  ggplot(aes(decade,fill=align)) + 
+  geom_bar(position="fill",alpha=0.7) +
+  labs(x="eye",y="hair") +
+  facet_grid(hair~eye)
+```
+
+<span style='font-size:14px; font-family:"Arial Black"'>
+<b><u>🚴 **EXERCISE :**</u></b></span><br>
+你可以試著修改上面的程式碼
+
++ 繪製**數字**而不是**比率**嗎？
++ 你發現了什麼呢？
++ 在這個 exercise 中，你學到了什麼呢？
+
+<br><br>
+
+
+
+

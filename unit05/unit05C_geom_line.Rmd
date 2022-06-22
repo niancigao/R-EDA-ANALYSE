@@ -1,0 +1,143 @@
+---
+title: 在折線圖中比較趨勢
+author: Tony Chuo, NSYSU
+date: "`r Sys.time()`"
+output: 
+  html_document: 
+    theme: spacelab
+    highlight: pygments
+    css: ../etc/style.css
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r echo=F, results='hide', message=FALSE, warning=FALSE}
+# 安裝、設定和格式化。不要修改此程式區塊。  
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE) 
+options(scipen=20, digits=4, width=80, tibble.print_min=4)
+# rmarkdown::find_pandoc(version = '2.7.3')
+```
+
+<br><br><p class="wwl"><span style='font-size:24px'> 🏠 </span>
+<span style='font-size:14px; font-family:"Arial Black"'>
+<b><u>重點提要 :</u></b></span><br>
+&emsp; ■ 用折線圖來觀察趨勢<br>
+&emsp; ■ 通過管道符號(pipeline)以連接 `dplyr` 和 `ggplot`<br>
+&emsp; ■ 同時從各個面向比較趨勢<br>
+</p class="wwl"><br>
+
+載入library裡面的套件並載入comics數據集
+```{r message=FALSE, warning=FALSE}
+pacman::p_load(dplyr,tidyr,ggplot2,plotly,gridExtra)
+theme_set(theme_get() + theme(
+  text=element_text(size=8), legend.key.size=unit(10,"points")
+  ))
+D = read.csv("data/comics1.csv",stringsAsFactors=F) %>% as_tibble
+```
+
+<br>
+
+### 1. 簡單折線圖
+
+讓我們計算並繪圖觀察每年首次亮相的新角色數量。
+```{r fig.height=2, fig.width=5}
+count(D, year) %>%                    # 計算每年新角色的數量
+  ggplot(aes(year, n)) + geom_line()  # 並繪製一個折線圖
+```
+
+`count()` 和 `ggplot() + geom_line()` 是一個非常方便的組合。我們可以通過一個額外的類別變數`publisher`來比較DC和Marvel每年新角色數量的的變化趨勢。
+
+```{r fig.height=2, fig.width=5}
+count(D, year, publisher) %>%                    
+  ggplot(aes(year, n, col=publisher)) + 
+  geom_line(size=1)
+```
+
+##### 1.1 消除波動的趨勢線
+
+觀察長期趨勢的時候，如果趨勢線看起來波動太大，我們可以增加測量週期，資料合併通常有助於抵消隨機誤差，讓趨勢線變得比較平滑；由於DC在1980年之前不活躍，所以我們：
+
++ 過濾掉1980年之前和2010年之後的數據
++ 將30年分為6個期間(period)
+
+```{r}
+breaks=seq(1980,2010,5)
+D2 = filter(D, year>=1980, year<=2010) %>%  
+  mutate(period = cut(year,breaks,breaks[-1],T) %>% 
+           as.character %>% as.integer)
+table(D2$period, useNA='ifany')  # 納入缺失值
+```
+
+```{r fig.height=1.8, fig.width=5}
+ggplot(D2, aes(period, fill=publisher)) + 
+  geom_bar(position='dodge')
+```
+
+像這樣通過條狀圖來判斷長期趨勢要容易得多，不是嗎?
+
+從上圖我們可以看到，漫畫產業在2000年經歷一個低谷之後，Marvel似乎比DC更早、更強勁地反彈回來。
+
+<br><br>
+
+
+### 2. 多方面比較趨勢 
+
+結合 `dplyr` 和 `ggplot`的強大功能，我們可以一次比較多個方面的趨勢。讓我們從一個簡單的圖開始，該圖視覺化了每個(好人/壞人/中立)陣營的比率如何變化。
+
+```{r fig.height=1.6, fig.width=3.2}
+count(D2, period, align) %>% 
+  group_by(period) %>% 
+  mutate(rate = n/sum(n)) %>% 
+  ggplot(aes(period, rate)) + 
+  geom_line(aes(col=align))
+```
+
+這一個趨勢是否因出版商而異呢？
+
+```{r fig.height=1.8, fig.width=4.8}
+count(D2, period, publisher, align) %>%  # 以類別型變數計算個數
+  group_by(period, publisher) %>%        # 根據period和publisher來對資料進行分組
+  mutate(rate = n/sum(n)) %>%            # 新增一個欄位rate並將計算的個數轉換為比率
+  ggplot(aes(period, rate)) + 
+  facet_grid(~publisher) +               # 每一個出版商一個繪圖區塊(produce 1 panel per publisher)
+  geom_line(aes(col=align), size=1) +    # 使線條更粗
+  geom_point()                           # 增加圓點使其看起來更好
+```
+
+<br>
+
+<span style='font-size:14px; font-family:"Arial Black"'>
+<b><u>🚴 **練習：**</u></b></span><br>
+讓我們嘗試以出版商和性別來比較(好人/壞人/中立)陣營的趨勢。正如下面的圖表中看到的，在4個單獨的繪圖區塊中有4個模式(there'd be 4 patterns in 4 separate panels.)。你可以通過修改程式區塊來製作下面的圖表嗎？
+
+```{r fig.height=3, fig.width=5}
+# count(D2, period, publisher, align) %>%  
+#   group_by(period, publisher) %>%        
+#   mutate(rate = n/sum(n)) %>%            
+#   ggplot(aes(period, rate)) + 
+#   facet_grid(sex~publisher) +            # 每一個繪圖區塊各一個出版商與性別(1 panel per publisher per sex)
+#   geom_line(aes(col=align), size=1) +    
+#   geom_point()                           
+```
+
+```{r fig.height=3, fig.width=5}
+count(D2, period, publisher, sex, align) %>%  
+  group_by(period, publisher, sex) %>%        
+  mutate(rate = n/sum(n)) %>%            
+  ggplot(aes(period, rate)) + 
+  facet_grid(sex~publisher) +            
+  geom_line(aes(col=align), size=1) +    
+  geom_point()                           
+```
+
+
+<br><br>
+
+
+
+
+
+
+
