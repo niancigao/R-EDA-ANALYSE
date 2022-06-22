@@ -1,0 +1,159 @@
+---
+title: UNIT08B 案例：航空公司的市場區隔
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# 這些程式碼設定網頁的格式，並安裝、載入一些基本的套件，請大家不要去改動<br>
+#rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8)
+options(scipen=20, digits=5, width=80)
+if(!require(pacman)) install.packages("pacman")
+```
+<br><hr>
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pacman::p_load(dplyr)
+```
+<br>
+
+### 【A】航空公司顧客資料集
+
+```{r}
+A = read.csv('data/AirlinesCluster.csv')
+summary(A)
+```
+
+&emsp; **欄位定義：**<br>
+&emsp; ■ `Balance`: 可用里程數<br>
+&emsp; ■ `QualMiles`: 可用高級里程數<br>
+&emsp; ■ `BonusMiles`: 過去12個月非飛行里程數<br>
+&emsp; ■ `BonusTrans`: 過去12個月非飛行交易次數<br>
+&emsp; ■ `FlightMiles`: 過去12個月飛行里程數<br>
+&emsp; ■ `FlightTrans`: 過去12個月飛行交易次數<br>
+&emsp; ■ `DaysSinceEnroll`: 會員年資 (天)<br><br>
+
+
+### 【B】資料標準化
+
+<p class="wwl"> `r "\U1F4A1"`
+`scale(df)` 標準化：讓資料框之中每一個欄位的平均值都等於`0`、標準差都等於`1`<br>
+</p class="wwl">
+
+<p class="qiz"> `r "\U1F5FF"` 
+**`Q:`** 集群分析和尺度縮減之前，為甚麼常要先做資料標準化呢？ 讓各變量影響程度相同<br>
+</p class="qiz"><br>
+
+```{r}
+AN = scale(A) %>% data.frame
+```
+
+```{r}
+sapply(AN, mean)
+```
+
+```{r}
+sapply(AN, sd)
+```
+
+<br><br>
+
+### 【C】層級式集群分析 Hirarchical Clustering  
+
+1.距離矩陣
+```{r}
+d = dist(AN, method="euclidean")
+```
+
+2.層級式集群分析
+```{r}
+hc = hclust(d, method='ward.D')
+```
+
+3.畫出樹狀圖 Dendrogram
+```{r}
+plot(hc)
+```
+<br>
+
+<p class="wwl">  `r "\U1F4A1"`
+樹狀圖中的垂直線段高度，代表分群之後，群內各點到族群中心點的平均距離縮短的幅度。<br>
+</p class="wwl">
+
+<p class="qiz"> `r "\U1F5FF"`
+**`Q:`** 如何從樹狀圖決定群數？先決定距離後橫切<br>
+</p class="qiz"><br>
+
+4.分割群組、製作分群向量 
+```{r}
+kg = cutree(hc, k=5)
+```
+<br><br>
+
+
+### 【D】觀察群組特性
+做完分群向量之後，通常要先觀察每一個族群的大小
+```{r}
+table(kg)
+```
+
+然後我們觀察每一個族群、每一個變數的平均值
+```{r}
+names(A) = names(AN) =c(
+  "里程數","高級里程數","非飛行里程","非飛行交易",
+  "飛行里程","飛行交易","會員年資")
+
+sapply(split(A,kg), colMeans) %>% round(2)  # 原始尺度 
+
+#用分群向量(split)切開，再算所有變數平均 
+```
+
+```{r}
+sapply(split(AN,kg), colMeans) %>% round(2)  # 標準化尺度 
+```
+
+**直條圖**
+```{r}
+par(cex=0.8)
+split(AN,kg) %>% sapply(colMeans) %>% barplot(beside=T,col=rainbow(7))
+legend('topright',legend=colnames(A),fill=rainbow(7))
+
+#老顧客(沉睡顧客) 老鳥優惠
+#具潛力新顧客(重要發展顧客)商業人士 特別服務
+#小資族(有交通需求) 打折、送免費機票 花錢買顧客
+
+
+# beside，F:累積成一條，T:分7條 
+
+```
+
+<hr>
+
+<p class="qiz">
+<span style="font-size:20px">`r "\U1F5FF"` 討論問題：</span><br>
+&emsp; ■ 分群平均值的代表什麼？ 它們的的商業意義是什麼？<br>
+&emsp; ■ 「原始尺度」和「標準化尺度」各有什麼優缺點？<br>
+&emsp; ■ 什麼時候要用原始尺度？ 什麼時候要用標準化尺度？<br>
+</p class="qiz"><br>
+
+<p class="qiz">
+<span style="font-size:20px">`r "\U1F5FF"` 討論問題：</span><br>
+&emsp; ■ 統計上最好的分群也是實務上最好的分群嗎<br>
+&emsp; ■ 除了考慮群間和群間距離之外，實務上的分群通常還需要考慮那些因數？<br>
+</p class="qiz"><br>
+
+<p class="qiz">
+<span style="font-size:20px">`r "\U1F5FF"` 討論問題：</span><br>
+&emsp; ■ 請你們為這五個族群各起一個名稱<br> 
+&emsp; ■ 請你們為這五個族群各設計一個行銷策略<br> 
+</p class="qiz"><br><br><br>
+
+

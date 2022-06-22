@@ -1,0 +1,167 @@
+---
+title: UNIT08A：集群分析與尺度縮減
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# 這些程式碼設定網頁的格式，並安裝、載入一些基本的套件，請大家不要去改動<br>
+#rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8)
+options(scipen=20, digits=5, width=80)
+if(!require(FactoMineR)) install.packages("FactoMineR")
+if(!require(factoextra)) install.packages("factoextra")
+if(!require(MASS)) install.packages("MASS")
+if(!require(dendextend)) install.packages("dendextend")
+if(!require(pacman)) install.packages("pacman")
+```
+<hr>
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pacman::p_load(dplyr, ggplot2, readr, FactoMineR, factoextra, dendextend)
+```
+<br>
+
+### 【A】批發商資料集
+
+```{r}
+
+W = read.csv('data/wholesales.csv')
+W$Channel = factor( paste0("Ch",W$Channel) ) # Ch1、Ch2
+W$Region = factor( paste0("Reg",W$Region) )  # Reg1、2、3
+W[3:8] = lapply(W[3:8], log, base=10)        # 取log方便看*數量or價格等
+summary(W)
+# 7-11&全家 / 北&中&南
+
+# 集群分析(分群)與尺度縮減(降維)
+
+```
+<br>
+
+### 【B】層級式集群分析(Clustering Analysis)
+
+集群分析：將分析對象依其 __相似性__ 分群
+
++ 分析對象：各零售店
++ 分群(區隔)變數：各類商品的購買數量
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 層級式集群分析的步驟：</span><br>
+&emsp; ■ `scale()` : 標準化 Standardization<br>
+&emsp; ■ `dist()` : 距離矩陣<br>
+&emsp; ■ `hclust()` : 層級式集群分析<br>
+&emsp; ■ `plot()` : 畫出樹狀圖<br>
+&emsp; ■ `rect.hclust()` : 依據dendrogram(樹狀圖)做切割<br>
+&emsp; ■ `cutree()` : 產生分群向量<br>
+</p class="wwl">
+
+為了方便解釋，我們先使用兩個**分群變數**做**層級式集群分析**
+```{r}
+hc = W[,3:4] %>% scale %>% dist %>% hclust # 層級式集群分析
+
+table(W$Channel,W$Region) # 7-11&全家 / 北&中&南
+
+```
+
+**樹狀圖的判讀與切割**
+```{r}
+plot(hc)
+k=6;rect.hclust(hc, k=k, border="red")
+# 依據dendrogram(樹狀圖)做切割
+
+```
+
+**產生分群向量**
+```{r}
+W$group = cutree(hc, k=8) %>% factor  # 產生分群向量
+W$group
+
+```
+
+**將分析對象畫在分群變數空間上面**
+```{r fig.width=5, fig.height=4.5}
+ggplot(W, aes(x=Fresh, y=Milk, col=group)) +  # 生鮮VS牛奶
+  geom_point(size=3, alpha=0.5)
+
+```
+<br><br>
+
+### 【C】使用五個分群變數做分群
+```{r}
+hc = W[,3:7] %>% scale %>% dist %>% hclust   # 標準化(每個變數的(尺度)影響變一樣)-距離-分群
+plot(hc)                                     # EX: 購買次數 & 購買金額
+k = 6; rect.hclust(hc, k, border="red")      # hclust的dendextend不會告訴你怎麼切，要自己框群
+W$group = cutree(hc, k) %>% factor
+
+```
+
+```{r}
+hc %>% as.dendrogram %>% color_branches(k) %>% color_labels(k,col='white') %>% plot
+
+#as.dendrogram:提供處理樹狀結構的通用函數。
+#替代層次聚類和分類/回歸樹中的類似功能，
+#以便所有這些都可以使用相同的引擎來繪製或切割樹
+
+#color_branches(k):根據子集群為樹的分支著色
+#color_labels(k,col='white')根據子集群為dend的標籤著色
+
+```
+<br><br>
+
+### 【D】尺度縮減(降維，Dimension Reduction)
+
++ 為什麼要降維？ 資料太多、雜
++ 降維的原理？ 投影到低維度，去掉不重要的東西
++ 降維的好處？ 留重要的東西、訊練速度變快
++ 降維的壞處？ 訊息損失
+
+
+**降維的方法(工具)：** 
++ 主成分分析：Principle Component Analysis - `PCA()` 
++ 多元尺度分析：Multi-Dimensional Scaling - `cmdscale()`
+
+
+
+```{r fig.height=7, fig.width=8}
+names(W)[3:8] = c('生鮮','奶製品','雜貨','冷凍','清潔用品','熟食')
+
+W[,3:8] %>% PCA(graph=FALSE) %>% fviz_pca_biplot(
+  col.ind=W$group, 
+  label="var", pointshape=19, mean.point=T,
+  addEllipses=T, ellipse.level=0.7,
+  ellipse.type = "convex", palette="ucscgb",
+  repel=T
+  )
+
+# 使用來自factoextra包的以下功能：
+# fviz_pca_ind() : 個人圖
+# fviz_pca_var() : 變量圖
+# fviz_pca_biplot()（或fviz_pca()）：個體和變量的Biplot
+
+# http://www.sthda.com/english/wiki/fviz-pca-quick-principal-component-analysis-data-visualization-r-software-and-data-mining
+
+# repel=T，避免文字互相重疊
+
+```
+<br><br>
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 學習重點：</span><br>
+&emsp; ■ 集群分析的基本觀念<br>
+&emsp; ■ 距離矩陣：Distance Matrix<br>
+&emsp; ■ 層級式集群分析：Hierarchical Cluster Analysis<br>
+&emsp; ■ 樹狀圖(Dendrogram)的判讀<br>
+&emsp; ■ 依據樹狀圖決定要分多少群<br>
+&emsp; ■ 集群分析與尺度縮減的綜合應用<br>
+&emsp; ■ 現代化的資料視覺化工具套件<br>
+</p class="wwl"><br><br>
+
+<br><br><br><hr>
+
