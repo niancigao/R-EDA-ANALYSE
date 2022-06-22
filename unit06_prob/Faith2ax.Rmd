@@ -1,0 +1,233 @@
+---
+title: Faith2ax：老忠實案例策略分析
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: spacelab
+    css: ../etc/style.css
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# 這些程式碼設定網頁的格式，並安裝、載入一些基本的套件，請大家不要去改動<br>
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+options(scipen=20, digits=4, width=80, tibble.print_min=4)
+if(!require(ggthemes)) install.packages("ggthemes")
+if(!require(pacman)) install.packages("pacman")
+```
+<hr>
+
+### 1. 參考程式
+
+```{r}
+#rm(list=ls(all=T))
+head(faithful)          # load data and      
+D = faithful$eruptions  # copy it to a short name
+```
+
+```{r}
+##### 先畫一個圖框 
+par(cex=0.7)
+plot(0,0,xlim=c(1.5,5.25),ylim=c(0,1.1),xlab="噴發時間(分鐘)", 
+     ylab="密度 or (累計)機率", main="分布、機率與密度")
+abline(h=1, col='lightgray', lwd=0.25, lty=2)
+
+
+##### 數值標記 
+# Empirical Rug PDF, 實證(數值標記)機率密度函數
+rug(D)
+# Empirical CDF, 實證(數值標記)累計機率密度函數
+plot(ecdf(D), cex=0, verticals=T, lwd=2, col='darkgray', add=T)
+
+
+##### Histogram PDF 直方圖機率密度函數 
+Bins = 20                               # no. bins
+bx = seq(min(D), max(D), length=Bins+1) # break sequence 
+hist(D, col="#B3FFFF7F", border="white", 
+     freq=F, breaks=bx, add=T)
+abline(h=0, col='lightgray', lwd=0.25)
+# Histogram CDF
+adj = (bx[2] - bx[1])/2
+steps = stepfun(bx-adj, c(0, sapply(bx, function(b) mean(D <= b)))) #階梯函數
+plot(steps, cex=0, col='#33CC337F', lwd=3, lty=1, add=T)
+
+
+##### Smooth PDF 平滑機率密度函數 
+Adjust = 0.5                       # set bandwidth (帶寬)
+DEN = density(D, adjust = Adjust)  # create density function
+lines(DEN, col='gold', lwd=3)      
+
+# Smooth CDF 畫出累計機率密度函數  
+PDF = approxfun(DEN$x, DEN$y, yleft=0, yright=0) #插值函數
+x = seq(1,6,0.1)
+y = sapply(x, function(i) integrate(PDF, -Inf, i)$value)
+lines(x, y, col='red', lwd=3, lty=2)
+
+##### 標示範圍[x1, x2] 
+x1 = 3.8; x2 = 4.8
+ #rect(x1,-0.1,x2,1.2,col= rgb(0,1,0,alpha=0.2),border=NA) 畫長方形
+x = seq(x1, x2, length=100)
+polygon(c(x, x2, x1),  c(PDF(x), 0, 0), col="#FF99003F", border=NA)
+```
+
+使用PDF估計機率
+```{r}
+# Calculate Probability 算出範圍[x1, x2]的機率
+(integrate(PDF, x1, x2)$value)
+```
+
+<br><br>
+
+
+
+### 2. 策略規劃
+
+##### CASE-01
+
+假如你是黃石公園的旅遊直昇機公司，你的業務需要預估老忠實下一次的噴發時間，假如現在的商業情境是：你可以花30元選定一個連續60秒的時段，如果老忠實下一次的噴發時間落在你指定的區間，你就可以贏到100元；請你使用頻寬為0.5的平滑密度模型 ... 
+
++ 決定要不要參加這個賽局
++ 如果你參加的話，你要把噴發時間設定在哪一個區間呢？
++ 設在這個區間的話，你參加這個賽局的淨期望報償是？
+
+```{r}
+pacman::p_load(dplyr, ggplot2)
+x1 = seq(0,5,0.1)
+p = sapply(x1, function(x) (integrate(PDF, x, x+1)$value)) #算機率
+data.frame(start=x1, stop=1+x1, p) %>% top_n(1, p)   #押每塊區間的機率再取最大
+```
+
+```{r}
+
+#參加
+#3.9 - 4.9 分
+#(100*0.47.6) - 30 = 17.6 元
+
+```
+
+<br><br>
+
+
+##### CASE-02
+
+假如商業情境變成：從零開始把每10秒鐘設為一個區間，每個區間的賭金是五塊錢 ...
+
++ 你要怎麼押注，才能獲得最高的期望報償呢？
++ 你的投資金額和期望報償各是多少？
+
+
+
+```{r}
+x = seq(1,6,1/6)  #10秒=1/6分鐘
+cx = sapply(x, function(i) integrate(PDF, -Inf, i)$value)  #CDF
+df = data.frame(
+  start = x - 1/6, stop = x, 
+  prob=cx -lag(cx)            #全-上一個=剩10秒區域機率
+  ) %>% 
+  mutate(payoff = 100*prob - 5) 
+bets = df %>% filter(payoff > 0) %>% arrange(start)  #payoff報償
+bets
+
+#正期望報酬相加-->最大、最高的期望報償
+```
+
+```{r}
+nrow(bets)         #要押幾注，Ans:9注，前提要有45塊
+5*nrow(bets)       #投資金額
+sum(bets$payoff)   #淨期望報償
+
+top_n(bets,4,payoff)$payoff %>% sum() #只有20元時的最佳淨期望報酬
+```
+
+<br><br>
+
+##### CASE 03
+
+將期望報償和投資金額的比值稱為「期望投資報酬率」 ...
+
++ 「最大期望投資報酬率」和「最大期望報酬」的投資策略是一樣的嗎？
++ 你認為哪一個策略目標比較好呢？ 為什麼？
+
+```{r}
+#不一樣
+#最大期望投資報酬率跟最大期望報酬的策略點不一定一樣
+#各有所好，各有追求
+#我選最大報酬，因為賺最多
+
+```
+
+```{r}
+df = df %>% arrange(desc(payoff)) %>% mutate(
+  n_bets = row_number(),       #看要押幾個
+  c_invest = n_bets * 5,       #投資金額
+  c_payoff = cumsum(payoff),   #累積報償
+  c_ROI = c_payoff/c_invest    #投資報酬率 (賺/成本)
+  ) %>% round(3)
+head(df,20) %>% round(3)
+```
+
+```{r}
+ggplot(df[1:20,], aes(c_ROI, c_payoff, color=c_invest)) + 
+  geom_point(size=3) + 
+  geom_text(aes(label=n_bets), color='black', nudge_y=0.6, size=2.5) +
+  scale_color_gradientn(colors=c('seagreen','gold','gold','orange','tomato','red')) +
+  labs(title="策略空間",color="投資金額",y="預期報償",x="預期投報率")
+```
+
+<br>
+
+<p class="qiz">
+<span style="font-size:16px">`r "\U1F5FF"` <b>策略空間：</b></span><br>
+&emsp; ■ 如何畫<z>策略空間</z>？ 策略空間的主要功能是？ <br>
+&emsp; ■ 何謂<z>效率前緣</z>？ 何謂<z>合理策略</z>？<br>
+<br>
+<span style="font-size:16px">`r "\U1F5FF"` <b>策略限制與權衡：</b></span><br>
+&emsp; ■ 如果沒有其它的投資機會，也沒有資金的限制，最佳的策略應該是？<br>
+&emsp; ■ 如果你的資金上限是`c_invest <= 40`呢？<br>
+&emsp; ■ 如果你有另外一個`ROI = 62.5%`的投資機會呢？<br>
+</p class="qiz">
+
+```{r}
+#策略空間:利用預期報酬和預期投報率
+#ggplot(df[1:20,], aes(c_ROI, c_payoff, color=c_invest)) + geom_point(size=3)
+#功能:模擬所有策略，方便找合理，績效指標好的事件
+
+#效率前緣:
+#總風險相同時，相對上可獲得最高的預期報酬率 #預期報酬相同時，相對上總風險最低的投資組合。
+
+#合理策略:決策的合理性，就是在能評價行動結果的一定價值體系下，選擇恰當的代替行為
+
+#選第9個策略
+nrow(bets)
+#8
+dim(df %>% filter(c_invest <= 40))[1]
+#7
+dim(df %>% filter(c_ROI >= 0.625))[1]
+```
+
+<hr>
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F36D"` 學習重點：</span><br>
+■ 資料分析的基礎：資料、統計量、圖形、模型 <br>
+■ 建立模型的步驟：模型形式、複雜度參數 <br>
+■ 模型是一種幫助我們在不確定下做決策的工具，有模型才能做量化的預測和估計 <br>
+■ 但是，預測並不等於決策，模型做完，商業分析才剛開始而已 <br>
+■ 商業分析的步驟： <br>
+&emsp; &emsp; ◇ 資料、模型 <br>
+&emsp; &emsp; ◇ 條件、預測、模擬、策略目標 <br>
+&emsp; &emsp; ◇ 策略目標視覺化、溝通、決策 <br>
+■ R語言可以串聯上述步驟，用資料裝配線來進行商業分析 <br>
+■ 決策是一個溝通的過程，視覺化提供一個溝通的基礎 <br>
+■ 策略空間： <br>
+&emsp; &emsp; ◇ 策略、績效指標 <br>
+&emsp; &emsp; ◇ 效率前緣、合理策略 <br>
+&emsp; &emsp; ◇ 策略限制、策略權衡 <br>
+</p class="wwl">
+
+<br><br>

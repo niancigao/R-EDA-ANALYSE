@@ -1,0 +1,318 @@
+---
+title: "DATA CASE：The Old Faithful "
+output: 
+  flexdashboard::flex_dashboard:
+    css: data/style.css
+    social: menu
+    source_code: embed 
+    logo: data/nsysu48.png
+    favicon: data/nsysu48.png
+    orientation: rows
+runtime: shiny
+---
+
+```{r}
+if(!require(shiny)) install.packages("shiny")
+if(!require(shinyWidgets)) install.packages("shinyWidgets")
+if(!require(flexdashboard)) install.packages("flexdashboard")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(plotly)) install.packages("plotly")
+D = faithful$eruptions
+# z = rmarkdown::find_pandoc(version = '2.7.3')
+```
+
+**Story** {data-icon="fa-binoculars"}
+=====================================
+
+Row {data-height=250}
+-------------------------------------
+### 🎬 **The Old Faithful** {data-width=75%}
+<iframe width="100%" height="100%"  frameborder="0" src="https://www.youtube.com/embed/4mZY7uxb7Gc?start=6"  allowfullscreen></iframe>
+
+### 🗽 **History** {data-width=25%}
+<div style="height:75%">
+In the afternoon of September 18, 1870, the members of the Washburn-Langford-Doane Expedition traveled down the Firehole River from the Kepler Cascades and entered the Upper Geyser Basin. The first geyser that they saw was Old Faithful. Nathaniel P. Langford wrote in his 1871 Scribner’s account of the expedition. “It spouted at regular intervals nine times during our stay, the columns of boiling water being thrown from ninety to one hundred and twenty-five feet at each discharge, which lasted from fifteen to twenty minutes. We gave it the name of”Old Faithful." — Nathaniel P. Langford, 1871
+</div>
+
+<div style="height:25%">
+<p><img src="data/cm_nsysu.png" alt="CM.NSYSU"  height="90" align="center"> <br>
+[Big Data Business Analytics Platform](https://bap2.cm.nsysu.edu.tw/?lang=en)<br>
+<span style="font-size:11px;">National Sun-Yatsen Univ., Taiwan</span></p>
+</div>
+
+
+Data & Chart {data-orientation=columns data-icon="fa-table"}
+=====================================
+Column {data-width=200}
+-------------------------------------
+### `data(faithful)`
+<div style="font-size:90%; height:100%; overflow-y:auto;">
+```{r}
+renderTable({ faithful })
+```
+</div>
+
+Column {data-width=300}
+-------------------------------------
+### 🌻 **Data** {data-height=15%}
+This dataset records 272 eruption events. It's hard to get any idea simply by looking to the raw data. To have a holistic view, we used to rely on statistics. 
+
+### 🌻 **Statistics** : `summary(faithful)` {data-height=35%}
+```{r}
+summary(faithful)
+```
+
+### 🌻 **Chart** {data-height=22%}
+The statistics might suggest that most of the eruption (waiting) times are around 3.488 (70.9) minutes respectively.  But, if you look at the chart on the right, you'd see that is not the case at all.     
+
+### 🌻 **Model** {data-height=28%}
+Chart help to explore the phenomenon or stricture within the data. But it cannot do numeric predictions or estimations for strategic planning. For this purpose, we need to build model, as we'll see in the next page.     
+
+
+Column 
+-------------------------------------
+### 🌻 **Scatter Plot** {data-height=85%}
+```{r}
+mutate(faithful, type = ifelse(eruptions > 3, "Long", "Short")) %>% 
+  ggplot(aes(waiting, eruptions, col=type)) +
+    geom_point(alpha=0.5) +
+    geom_smooth(method='lm', se=F) +
+    geom_smooth(method='lm', se=F, col="gray", lty=2) +
+    labs(x="Waiting Time",y="Eruption Time",col="",
+         title="The Eruption Events") + 
+    theme_bw() -> p
+ggplotly(p) %>%  layout(legend = list(x = 0.05, y = 0.95))
+```
+
+
+Model {data-orientation=rows data-icon="fa-cogs"}
+=====================================
+
+Row {data-height=75%}
+-------------------------------------
+
+### 📊 **Distrubution** {data-width=70%}
+```{r}
+txt = "A model is a mathematical representation of a variable.\nA distribution function is a model that describes how the value of a variable varies."
+
+renderPlot({
+  par(mar=c(4,4,2,1))
+  plot(0,0,xlim=c(1.5,5.25),ylim=c(0,1.1),xlab="Eruption Time (minutes)", 
+       ylab="Desnity of Prob.", main="Distribution of Eruption Time")
+  abline(h=1, col='gray', lwd=0.5, lty=2)
+  text(3.4, 1.13, txt, pos=1, col="navyblue", cex=1.2)
+
+  bx = seq(min(D), max(D), length.out=input$W)
+  adj = (bx[2] - bx[1])/2
+  DEN = density(D, adjust = input$B)
+  PDF = approxfun(DEN$x, DEN$y, yleft=0, yright=0)
+
+  if(input$rug) rug(D)
+  if(input$hist) hist(
+    D,freq=F,col="#B3FFFF",border="white",
+    ylim=c(0,1.1),add=T,breaks=bx)
+  if(input$pdf) lines(DEN, col='gold', lwd=3)
+  
+  if(input$cdf.r) plot(ecdf(D), cex=0, verticals=T, add=T, lwd=2, col='darkgray')
+  if(input$cdf.h) plot(
+    stepfun(bx - adj, c(0, sapply(bx, function(b) mean(D <= b)))),
+    cex=0, col='#33CC337F', lwd=3, add=T)
+  if(input$cdf.d) {
+    x = seq(1,6,0.1)
+    abline(v=input$R, col='gold', lwd=0.5)
+    lines(x, sapply(x, function(i) 
+      integrate(PDF, -Inf, i)$value), col='red', lwd=3, lty=2) 
+    x=c(input$R)
+    y=c(integrate(PDF, -Inf, x[1])$value, integrate(PDF, -Inf, x[2])$value)
+    points(x, y, col="orange", pch=16, cex=2)
+    text(x, y, round(y,3), pos=3, cex=1.2)
+    }
+
+  x = seq(input$R[1], input$R[2], length=100)
+  polygon(c(x, input$R[2], input$R[1]),  c(PDF(x), 0, 0), 
+          col="#FF99003F", border=NA)
+  abline(h=0, col='gray', lwd=0.5)
+
+  })
+```
+
+### ⏱ **Estimating Probability**  {data-width=30%}
+```{r}
+chooseSliderSkin("Modern")
+
+renderGauge({
+  DEN = density(D, adjust = input$B)
+  PDF = approxfun(DEN$x, DEN$y, yleft=0, yright=0)
+  PROB = integrate(PDF, input$R[1], input$R[2])$value
+  gauge(round(100*PROB,1), min = 0, max = 100, symbol = '%', gaugeSectors(
+    success = c(41, 100), warning = c(21, 40), danger = c(0, 20)) )
+  })
+sliderInput("R", "Time Period", 1.4, 5.4, c(2.7,4.3), 0.1, width='350px')
+
+```
+
+Row {data-height=25%}
+-------------------------------------
+### 🚴 **Prob. Dist. Func. (PDF)** {data-width=20%}
+```{r}
+checkboxInput("rug", "Data Rugs", T)
+prettyCheckbox("hist", "Histogram", F, status="info", shape="curve")
+prettyCheckbox("pdf", "Density Func.", T, status="warning", shape="curve")
+```
+
+### 🚴 **Cumulative Dist. Func. (CDF)** {data-width=20%}
+```{r}
+checkboxInput("cdf.r", "Rugs CDF", F)
+prettyCheckbox("cdf.h", "Histogram CDF", F, status="success", shape="curve")
+prettyCheckbox("cdf.d", "Density Func. CDF", T, status="danger", shape="curve")
+```
+
+### 🚴 **Adjust the Level of Detail** {data-width=30%}
+```{r}
+sliderInput("W", "Histogram, no. Bins", 10, 40, 20, 2, width='400px') 
+sliderInput("B", "Density Func., Bandwidth", 0.3, 1.8, 1, 0.1, width='400px')
+```
+
+### 💡 **Tutorial**  {data-width=30%}
+<span style="font-size:24px"> `r emo::ji("teacher")` </span> : 
+[Youtube Video](https://youtu.be/UsF7KecPYwY)
+(ctrl + click)
+
+<br><div style="height:25%">
+<p><img src="data/cm_nsysu.png" alt="CM.NSYSU"  height="90" align="center"> <br>
+[Big Data Business Analytics Platform](https://bap2.cm.nsysu.edu.tw/?lang=en)<br>
+<span style="font-size:11px;">National Sun-Yatsen Univ., Taiwan</span></p>
+</div>
+
+Scanerio {data-icon="fa-chess-knight"}
+=====================================
+### <span style="font-size:22px">`r "\U1F5FF"` Discussion：</span>  {data-height=250}
+<p class="qiz">
+If you ran a Tourist Helicopter Company in Yellowstone Park. It'd be important for you to predict the eruption time of the next eruption. If your business scenario could be simplify as a game in which you can bet $30 on a consecutive period of 60 seconds, and you'd win $100 if the next eruption time fall within the period you'd chosen. <br>
+Please use the density model of bandwidth=0.5 to decide ... <br>
+&emsp;■ Whether to place the game or not?<br>
+&emsp;■ If you join the game, which time period would you choose?<br>
+&emsp;■ In the period you'd chosen, what is the expected value of the game?<br>
+<br>
+The game rule has changed. Now you can place multiple bets of $5 on any 10-second periods (0~10, 10~20, 20~30 second etc.) Still you'd win $100 if the next eruption time fall within the periods you'd chosen.<br>
+&emsp;■ For the maximum expected value, how would you place your bets?<br>
+&emsp;■ What is the overall expected value of your bets?<br>
+<br>
+Let's define **Expected ROI** as the ratio of the expected return versus the amount of investment (the sum of your betting money) ...<br>
+&emsp;■ What is the strategy to maximize the Expected ROI?<br>
+&emsp;■ Is the strategy for maximal Expected ROI the same as that of maximal Expected Return?<br>
+&emsp;■ Which of the two strategic objectives is better? and Why?  <br>
+<br>
+</p class="qiz">
+
+
+Simulation {data-orientation=columns data-icon="fa-chess-knight"}
+=================================================================
+Column {data-width=45%}
+-------------------------------------
+### 🌷 <b>The Output of Simulation</b> {data-height=52%}
+<div style="font-size:13px; height:98%; overflow-y:auto; font-family:'Consolas';">
+```{r}
+DEN = density(D, adjust=0.5)                # density function  
+PDF = approxfun(DEN$x, DEN$y, yleft=0, yright=0)         # pdf
+x = seq(1,6,1/6)                             # 10 second steps
+cdf = sapply(x, function(i) integrate(PDF,-Inf,i)$value) # cdf
+outcome = data.frame(
+  start = x - 1/6, stop = x, 
+  prob = cdf -lag(cdf) 
+  ) %>% 
+  mutate(payoff = 100*prob - 5) %>% 
+  arrange(desc(payoff)) %>% 
+  mutate(
+    n_bets = row_number(),
+    c_invest = n_bets * 5,
+    c_payoff = cumsum(payoff),
+    c_ROI = c_payoff/c_invest
+  ) 
+renderTable({ outcome })
+```
+</div>
+
+### ⛓ <b>Model：PDF & CDF</b> {data-height=10%}
+<p style="font-family:'Consolas'; font-size:11px; 
+color:#00c000; background:#000000;
+border-left:12px solid #cce6ff; padding:4px; padding-left:10px;">
+DEN = density(D, adjust=0.5) <br>
+PDF = approxfun(DEN\$x, DEN\$y, yleft=0, yright=0) <br>
+x = seq(1,6,1/6) <br>
+cdf = sapply(x, function(i) integrate(PDF,-Inf,i)$value)<br> 
+<br>
+</p>
+
+### ⛓ <b>Data Processing Pipeline</b> {data-height=38%}
+<p style="font-family:'Consolas'; font-size:11px; 
+color:#00c000; background:#000000;
+border-left:12px solid #cce6ff; padding:4px; padding-left:10px;">
+outcome = data.frame( <br>
+&emsp; &emsp; start = x - 1/6, stop = x, <br> 
+&emsp; &emsp; prob = cdf -lag(cdf) ) %>%  <br>
+&emsp; mutate(payoff = 100 \* prob - 5) %>%  <br>
+&emsp; arrange(desc(payoff)) %>%  <br>
+&emsp; mutate( <br>
+&emsp; &emsp; n_bets = row_number(), <br>
+&emsp; &emsp; c_invest = cumsum(n_bets * 5), <br>
+&emsp; &emsp; c_payoff = cumsum(payoff), <br>
+&emsp; &emsp; c_ROI = c_payoff/c_invest) <br>
+<br>
+</p>
+
+Column {data-width=55%}
+-------------------------------------
+### 🎲 <b>Strategy Space</b>  {data-height=60%}
+```{r}
+renderPlot({
+  ggplot(outcome[1:20,], aes(c_ROI, c_payoff, color=c_invest)) + 
+    geom_point(size=5) + 
+    geom_text(aes(label=n_bets), color='black', nudge_y=1,size=4.5) +
+    scale_color_gradientn(colors=c('seagreen','gold','gold','orange','red','darkred')) +
+    labs(color="Investment",y="Exp. Payoff",x="Exp. ROI")
+  })
+```
+
+### {data-height=40%}
+
+<p class="wwl">
+<span style="font-size:14px">`r "\U1F36D"` <b>Strategy Space：</b></span><br>
+&emsp; ■ Every point is a <z>Strategy</z> <br>
+&emsp; ■ Each dimension is a <z>Performance Index</z> <br>
+&emsp; ■ The ideas of <z>Efficiency Frontier</z> & <z>Reasonable Strategies</z><br>
+</p class="wwl">
+
+<p class="wwl">
+<span style="font-size:14px">`r "\U1F36D"` <b>Tradeoff and Constraints：</b></span><br>
+&emsp; ■ If there's no constraints, what is the optimal strategy？<br>
+&emsp; ■ What if you have a capital limitation at `c_invest < 40`？<br>
+&emsp; ■ What if you have another investment opportunity with `ROI = 62.5%`？<br>
+</p class="wwl">
+
+
+Key Learning {data-icon="fa-lightbulb"}
+=====================================
+### <span style="font-size:22px">`r "\U1F4A1"` What we'd Learned</span>  {data-height=250}
+<p class="wwl">
+■ The Concept of Distribution and Model<br>
+■ The Concepts of Model Forms and Model Parameters<br>
+■ The Trade off between Sensibility & Generality<br>
+■ Selecting model(s) and setting argument(s)<br>
+■ Analytics: Data, Stat., Visual, Model, Predict, Simulate, Optimize<br>
+■ Analytics process as a Data Pipeline<br>
+■ Analytics: Data, Stat., Visual, Model, Predict, Simulate, Optimize<br>
+■ Strategy making is a communication process<br>
+■ Strategy Space is very helpful in making decision<br>
+</p class="wwl">
+
+
+
+
+
+
+
+
+
+
