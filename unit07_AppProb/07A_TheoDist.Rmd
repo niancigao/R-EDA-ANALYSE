@@ -1,0 +1,169 @@
+---
+title: UNIT07A：離散理論機率分佈
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# 這些程式碼設定網頁的格式，並安裝、載入一些基本的套件，請大家不要去改動<br>
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8)
+options(scipen=20, digits=5, width=80)
+if(!require(pacman)) install.packages("pacman")
+```
+<hr>
+
+```{r}
+pacman::p_load(dplyr)
+```
+
+### 【1】$n$很大時，二項分佈(Binominal Dist.)會趨近於常態(Normal)分佈
+
++ When $n$ is large, $Binom[n, p]$ approaches $Norm[\mu = n p, \sigma=\sqrt{n p (1-p)}]$ 
+
++ $X \sim Binom[n, p] \, \Rightarrow 
+\, Exp(X) = n \cdot p \, , \, Var(X) = n \cdot p \cdot (1-p)$
+
+```{r fig.height=2.4, fig.width=7.2}
+par(mfrow=c(1,1), mar=c(3,4,3,1), cex=0.7)
+n = 1000; p = 0.2
+rbinom(500000, n, p) %>% hist(breaks=80, freq=F, main="")
+curve(dnorm(x, mean=n*p, sd=sqrt(n*p*(1-p))), col='red', lwd=2, add=T)
+#add=T:加在原有的圖形上面
+```
+
+```{r fig.height=2.4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.7)
+n = 10; p = 0.2
+rbinom(100000, n, p) %>% table %>% barplot()
+rnorm(100000, n*p, sqrt(n*p*(1-p))) %>% hist(freq=F)
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span> :
+當期望值夠大的時候， 二項分佈會以期望值為中心向兩邊對稱的伸展，但是如果期望值不夠大的話，這個分佈的左尾就會受到擠壓，變成一個不對稱的分佈。<br><br>
+
+### 【2】$n \times p$不大時，二項分佈(Binominal Dist.)會趨近於Poisson分佈
+
++ When $n$ is large and $p$ is small, $Binom[n, p]$ approaches $Pois[\lambda = n p]$ 
+
+```{r fig.height=2.4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.7)
+rbinom(100000, 1000, 0.002) %>% table %>% barplot(main="Boinomial")
+rpois(100000, 2)  %>% table %>% barplot(main="Poisson")
+```
+
+<br><span style="font-size:24px">`r "\U1F5FF"`</span> :
+如果Poisson分佈很接近二項分佈，我們為甚麼還需要Poisson分佈呢？<br>
+
+<span style="font-size:24px">`r "\U1F4A1"`</span> :
+簡單、一般性 vs 複雜、準確性<br><br>
+
+
+### 【3】Poisson分佈的特性：(1)期望值等於標準差 & (2)期望值對加法有封閉性
+
++ $X \sim Pois[\lambda] \, \Rightarrow \, E(X) = Var(X) = \lambda$ 
+
+```{r}
+sapply(1:10, function(lambda) {
+  x = rpois(1000000, lambda)
+  c(mean(x), var(x))
+  })
+```
+
++ $X \sim Pois[\lambda_1], \, Y \sim Pois[\lambda_2] \, \Rightarrow \, X+Y \sim Pois[\lambda_1 + \lambda_2]$ 
+
+```{r fig.height=2.4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.7)
+(rpois(100000, 1) + rpois(100000, 2)) %>% table %>% barplot(main="Pois[1] + Pois[2]")
+rpois(100000, 3)  %>% table %>% barplot(main="Pois[3]")
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`</span> :
+透過模擬：(1)建立變數向量(隨機變數)；(2)驗證理論；(3)做預測與估計 <br><br>
+
+```{r fig.height=2.5, fig.width=8}
+K = 10000000
+par(mfrow=c(2,2), cex=0.7)
+d1 = sample(faithful$eruptions, K, T); d1 %>% hist
+d2 = rpois(K, 6); d2 %>% table %>% barplot
+d3 = rnorm(K, 0, 1); d3 %>% hist
+(d1*d2+4*d3) %>% hist
+```
+
+
+
+### 【4】Geometric Dist.基本上是等待時間的分佈
+我們可以用二項分佈來模擬Geometric Dist.
+```{r fig.height=2.4, fig.width=8}
+par(mfrow=c(1,2), mar=c(3,3,3,1), cex=0.7)
+replicate(100000, which(rbinom(100, 1, .3) == 1)[1] - 1) %>% 
+  table %>% barplot(main="Binomial Simulation")
+rgeom(100000, 0.3) %>% table %>% barplot(main="Geometric")
+
+#which(rbinom(100, 1, .3) == 1)[1]):回傳第一次成功Index
+```
+
+<span style="font-size:24px">`r "\U1F5FF"`</span> :
+如果有一台機器每一天壞掉的機率是0.05，那麼在20天之內，它還能正常工作的機率分別是多少呢？<br>
+
+```{r}
+dgeom(0:20, 0.05) %>% cumsum
+```
+
+<br>
+
+### 【5】Geometric Dist.的期望值
+
++ $X \sim Geom[p] \, \Rightarrow \, E[X] = \frac{1}{p}-1$ <br>
+
+<span style="font-size:24px">`r "\U1F5FF"`</span> :
+如果平均而言每一個捐贈者有我需要的器官的機率是5%，那麼平均我要等多少個捐贈者才能等到我想要用的器官呢？<br>
+
+```{r}
+(1/0.05)-1
+```
+
+<span style="font-size:24px">`r "\U1F5FF"`</span> :
+不用Geometric的期望值公式，妳可以使用`dgeom()`算出同樣的答案嗎？<br>
+```{r}
+sum(0:1000 * dgeom(0:1000, 0.05))
+```
+<br><br><hr>
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 
+隨機變數的平均值與標準差公式</span><br>
+&emsp; ■ $E(c) = c ; V(c) = 0$<br>
+&emsp; ■ $E(a+b X) = a+bE(X) ; V(a+b X) = b^2 V(X)$<br>
+&emsp; ■ $E(a X + b Y) = aE(X) +bE(Y)$<br>
+&emsp; ■ $V(a X + b Y) = a^2V(X) +b^2V(Y) + 2abV(X)V(Y)$
+</p class="wwl"> 
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 
+數理推論為基礎的機率統計之所以難學，主要是因為：</span><br>
+&emsp; ■ 隨機變數的觀念很抽象；<br>
+&emsp; ■ 光使用數學公式很難理解『分佈』的概念；<br>
+&emsp; ■ 有很多不同種類的分佈，公式記不完；<br>
+&emsp; ■ 隨機變數之間要做四則運算常常非常困難；<br>
+</p class="wwl"> 
+
+<span style="font-size:24px">`r "\U1F5FF"`</span> :
+在R的環境之下，我們如何克服上述的各項困難呢？ 加油!
+<br><br><br>
+
+
+
+
+
+
+
+
+
