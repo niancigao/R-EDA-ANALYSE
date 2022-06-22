@@ -1,0 +1,102 @@
+---
+title: "交通工具市佔率模擬"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: united
+    css: ../etc/JH.css
+    social: menu
+    source_code: embed 
+runtime: shiny
+---
+
+```{r}
+pacman::p_load(ggplot2,mlogit,dplyr,reshape2)
+pacman::p_load(shinyWidgets,shinythemes,RColorBrewer)
+
+data = read.csv(file = "data/transportation_data.csv") %>% 
+  mutate_at(vars(TTME:HINC),as.numeric) %>% data.frame
+alt = c("plane", "train", "bus", "car")
+
+# mdata <- mlogit.data(
+#   data=data,
+#   choice='MODE', # variable that contains choice
+#   shape='long',  # every row is an alternative
+#   varying=3:5,   # select variables that describe the alternatives
+#   alt.levels = alt,   # levels of the alt
+#   id.var='TRAVELER')  # consumer id
+mdata <- dfidx(
+  data=data,
+  choice='MODE', # variable that contains choice
+  idx=210,
+  idnames = c("individual", "mode")
+  )
+
+m2 <- mlogit(MODE~TTME+INVC+INVT|HINC,data=mdata)
+Set1 = brewer.pal(12,"Paired"); Set1[11] = 'gray'
+fun1 = function(x, K) 1/x^(K/10)
+```
+
+Column {data-width=200}
+-------------------------------------
+### 時間、成本轉換效率函數
+```{r fig.height=3.3}
+renderPlot({
+  par(mar=c(4,4,1,1), cex=0.8)
+  plot(1,1,pch=20,col='green3',ylab='Time Ratio',xlab='Price Ratio',
+       xlim=c(0.5,2),ylim=c(0.5,2))
+  abline(v=seq(0,2,0.2),h=seq(0,2,0.2),col='lightgray',lty=3)
+  for(n in 10:0) { 
+    if(n == input$K) {cx="green3"; wd=2}
+    else {cx="gray"; wd=1}
+    curve(fun1(x,n),0.5,2,add=T,col=cx,lwd=wd)
+    text(0.48, fun1(0.5,n), n, col=cx)
+    text(2.02, fun1(2,n), n, col=cx)
+  }
+})
+```
+
+### 
+```{r}
+chooseSliderSkin("Modern")
+sliderInput("K", "轉換效率(K)", 0, 10, 7, 1, width='400px')
+radioGroupButtons(
+  "A","交通工具(A)",c("train","bus","plane","car"),size="sm")
+radioGroupButtons(
+  "I","收入等級(I)",c("ALL","1","2","3","4"),size="sm")
+materialSwitch("D","市佔率變化量(D)",TRUE,"success",width="80%")
+```
+
+<hr><p>
+<img src="fig/cm_nsysu2.jpg" alt="CM.NSYSU" width="105" height="92" align="left"> <br>
+[中山管院 商業大數據](https://bap.cm.nsysu.edu.tw/) <br>
+<p style="font-size:9px">李劭竑、王欣、張叡哲、卓雍然</p></p>
+
+
+Column {data-width=400}
+-------------------------------------
+### <b>選定交通工具與其時間、成本轉換效率，估計市佔率如何隨成本改變</b>
+```{r}
+renderPlot({
+# input=list(K=7,A="plane",I="ALL",D=T)
+price = seq(0.5,2.0,0.05)
+cuts = cut(mdata$HINC,seq(0,80,20),1:4,right=F)
+if(input$I == "ALL") dx=mdata else dx=mdata[cuts == input$I, ]
+i = rep(alt == input$A, nrow(dx)/4)
+Shares = predict(m2,dx) %>% colSums %>% prop.table
+sapply(price, function(p) {
+  dx$INVC[i] = dx$INVC[i] * p
+  dx$INVT[i] = dx$INVT[i] * fun1(p, input$K)
+  share = prop.table(colSums(predict(m2, dx)))
+  if(input$D) share = share - Shares
+  c(price=p, share)
+  }) %>% t %>% data.frame %>% # View
+  melt(1, value.name="share", variable.name='choice') %>% 
+  ggplot(aes(price, share, fill=choice)) +
+  geom_area(alpha=0.2, position=position_dodge(width=0)) +
+  geom_line(aes(color=choice),lwd=1) +
+  theme_bw(base_size=14) + theme(legend.position="bottom") +
+  xlab("Price Ratio") + ylab("Market Share") +
+  labs(fill="Choice: ", color="Choice: ")
+})
+```
+

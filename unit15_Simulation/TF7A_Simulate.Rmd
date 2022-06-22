@@ -1,0 +1,87 @@
+---
+title: "TF7A 行銷工具市場模擬"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: default
+    css: ../etc/style.css
+    source_code: embed 
+runtime: shiny
+---
+
+```{r}
+options(shiny.usecairo = FALSE)
+pacman::p_load(dplyr,ggplot2,plotly,shinyWidgets,shinythemes)
+load("data/tf4.rdata")
+```
+
+Column A1 {.sidebar data-width=240}
+-------------------------------------
+```{r}
+str = ".js-irs-%d .irs-single, .js-irs-%d .irs-bar-edge, .js-irs-%d .irs-bar {background: %s}"
+sliderColors = function(i, col) tags$style(HTML(sprintf(str,i,i,i,col)))
+sliderColors(0,'magenta'); sliderColors(1,'magenta'); sliderColors(2,'magenta')
+sliderColors(3,'darkcyan'); sliderColors(4,'darkcyan'); sliderColors(5,'darkcyan')
+chooseSliderSkin("Modern")
+div(style="height: 90px;", sliderInput("m1","m1",0.04,0.2,0.12,0.01) )
+div(style="height: 90px;", sliderInput("b1","b1",10,50,25,5) )
+div(style="height: 90px;", sliderInput("a1","a1",10,100,50,5) )
+hr()
+div(style="height: 90px;", sliderInput("m2","m2",0.04,0.2,0.16,0.01))
+div(style="height: 90px;", sliderInput("b2","b2",10,50,35,5))
+div(style="height: 90px;", sliderInput("a2","a2",10,100,70,5))
+
+rMargin = 0.5
+X = seq(2,100,1)
+Simu = function(name, m, b, a) {
+  df = tibble(inst=name, cost=X,
+              eff = m * plogis((10/a)*(X-b)))
+  df2 = sapply(1:nrow(df), function(i) {
+    eR = pmin(1-B$Buy, df$eff[i])*B$Rev*rMargin - df$cost[i] 
+    c(eReturn=sum(eR), N=sum(eR > 0), eReturn2=sum(eR[eR > 0]))
+  }) %>% t
+  cbind(df, df2) }
+DF1 = reactive({ Simu("I1", input$m1, input$b1, input$a1) })
+DF2 = reactive({ Simu("I2", input$m2, input$b2, input$a2) })
+DF = reactive({ rbind(DF1(), DF2()) })
+```
+
+ColumnA1 {}
+-------------------------------------
+### 成本效益函數
+```{r}
+renderPlot({
+DF() %>%
+  ggplot(aes(x=cost, y=eff, col=inst)) +
+  geom_line(size=1.5,alpha=0.5) + theme_bw() +
+  ggtitle("Prob. Function: f(x|m,b,a)") + ylim(c(0,0.20))
+})
+```
+
+### 目標人數
+```{r}
+renderPlot({
+DF() %>% ggplot(aes(x=cost, y=N, col=inst)) +
+  geom_line(size=1.5,alpha=0.5) + theme_bw() +
+  ggtitle("No. Customer Selected") + ylim(c(0,30000))
+})
+```
+
+ColumnA1 {}
+-------------------------------------
+### 模擬結果(全選)
+```{r}
+renderPlot({
+DF() %>% ggplot(aes(x=cost, y=eReturn, col=inst)) +
+  geom_line(size=1.5,alpha=0.5) + theme_bw() +
+  ggtitle("Expected Return, All") + ylim(c(-1e6,1e6))
+})
+```
+
+### 模擬結果(針對目標)
+```{r}
+renderPlot({
+DF() %>% ggplot(aes(x=cost, y=eReturn2, col=inst)) +
+  geom_line(size=1.5,alpha=0.5) + theme_bw() +
+  ggtitle("Expected Return, Selected") +  ylim(c(0,1e6))
+})
+```
