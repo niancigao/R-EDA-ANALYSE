@@ -1,0 +1,340 @@
+---
+title: 'Modeling the Expert: Intro. Logistic Regression'
+output: html_document
+date: '2022-05-09'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages('caTools')
+# install.packages('ROCR')
+
+```
+
+```{r}
+library(caTools)
+library(ROCR)
+
+```
+
+## Quick Question
+
+Which of the following dependent variables (因變量) are categorical (分類)? (Select all that apply.)
+
+```{r }
+
+# Deciding whether to buy, sell, or hold a stock   # T
+# The weekly revenue of a company                  # 
+# The winner of an election with two candidates    # T
+# The day of the week with the highest revenue     # T
+# The number of daily car thefts in New York City  # 
+# Whether or not revenue will exceed $50,000       # T
+
+```
+
+Which of the following dependent variables are binary (二元) ? (Select all that apply.)
+
+```{r }
+
+# Deciding whether to buy, sell, or hold a stock   # 
+# The weekly revenue of a company                  # 
+# The winner of an election with two candidates    # T
+# The day of the week with the highest revenue     # 
+# The number of daily car thefts in New York City  # 
+# Whether or not revenue will exceed $50,000       # T
+
+```
+
+## Quick Question
+
+Suppose the coefficients of a logistic regression model with two independent variables are as follows:
+
+$\beta_0 = -1.5,\beta_1 = 3,\beta_2 = -0.5$
+
+And we have an observation with the following values for the independent variables:
+
+$x_1 = 1,x_2 = 5$
+
+What is the value of the Logit for this observation? Recall that the Logit is log(Odds).
+
+$odd = Exp(logit) = \frac{p}{1-p}$
+
+$logit = f(x) = b_0 + b_1 x_1 + b_2 x_2 = log(odd) = log(\frac{p}{1-p})$
+
+```{r }
+
+b = c(-1.5, 3, -0.5)
+logit = sum(b * c(1, 1, 5))
+logit
+
+```
+
+What is the value of the Odds for this observation? Note that you can compute e^x, for some number x, in your R console by typing exp(x). The function exp() computes the exponential of its argument.
+
+```{r }
+
+odd = exp(logit)
+odd
+
+```
+
+What is the value of P(y = 1) for this observation?
+
+```{r }
+
+prob = odd/(1+odd)
+prob
+
+```
+
+```{r}
+
+quality = read.csv('C:/cm502/Unit3/quality.csv')
+str(quality)
+
+```
+
+```{r}
+table(quality$PoorCare)
+
+```
+
+## sample.split ：將數據拆分為測試集和訓練集
+
+將向量Y中的數據以預定義的比例拆分為兩組，同時保留Y中不同標籤的相對比例
+用於將分類期間使用的數據拆分為訓練和測試子集
+
+```{r }
+
+set.seed(88)
+
+split = sample.split(quality$PoorCare, SplitRatio = 0.75) # 75% - 25%
+split # 用T & F分出訓練 & 測試集
+
+```
+
+```{r}
+
+qualityTrain = subset(quality, split == TRUE)
+qualityTest = subset(quality, split == FALSE)
+nrow(qualityTrain)
+nrow(qualityTest)
+
+```
+
+```{r}
+
+QualityLog = glm(PoorCare ~ OfficeVisits + Narcotics,
+                 data = qualityTrain, family = binomial)
+summary(QualityLog)
+
+```
+
+```{r}
+
+predictTrain = predict(QualityLog, type = 'response')
+summary(predictTrain)
+
+```
+
+```{r}
+
+tapply(predictTrain, qualityTrain$PoorCare, mean)
+
+```
+
+## Quick Question
+
+In R, create a logistic regression model to predict "PoorCare" using the independent variables "StartedOnCombination" and "ProviderCount".<br> 
+Use the training set we created in the previous video to build the model.
+
+quality = read.csv("quality.csv")
+
+install.packages("caTools")
+
+library(caTools)
+
+set.seed(88)
+
+split = sample.split(quality$PoorCare, SplitRatio = 0.75)
+
+qualityTrain = subset(quality, split == TRUE)
+
+qualityTest = subset(quality, split == FALSE)
+
+Then recall that we built a logistic regression model to predict PoorCare using the R command:
+
+QualityLog = glm(PoorCare ~ OfficeVisits + Narcotics, data=qualityTrain, family=binomial)
+
+You will need to adjust this command to answer this question, and then look at the summary(QualityLog) output.
+
+What is the coefficient for "StartedOnCombination"?
+
+```{r}
+
+set.seed(88)
+
+split_1 = sample.split(quality$PoorCare, SplitRatio = 0.75)
+
+qualityTrain_1 = subset(quality, split == TRUE)
+
+qualityTest_1 = subset(quality, split == FALSE)
+
+QualityLog_1 = glm(PoorCare ~ StartedOnCombination + ProviderCount,
+                 data=qualityTrain_1, family=binomial)
+summary(QualityLog_1)
+
+QualityLog_1$coefficients['StartedOnCombinationTRUE']
+
+```
+
+```{r}
+# T:poor；F:good
+table(qualityTrain$PoorCare, predictTrain > 0.5) # threshold = 0.5
+
+10/25  # sensitivity 0.4
+70/74  # specificity 0.95
+
+```
+
+## Increasimg the threshold, sensitivity went down, specificity went up
+
+```{r}
+# T:poor；F:good
+table(qualityTrain$PoorCare, predictTrain > 0.7) # threshold = 0.7
+
+8/25   # sensitivity 0.32
+73/74  # specificity 0.99
+
+```
+
+## Lower threshold, sensitivity went up, specificity went down
+
+```{r }
+# T:poor；F:good
+table(qualityTrain$PoorCare, predictTrain > 0.2) # threshold = 0.2
+
+16/25   # sensitivity 0.64
+54/74   # specificity 0.72
+
+```
+
+## Quick Question
+
+This question asks about the following two confusion matrices:
+
+What is the sensitivity of Confusion Matrix #1?
+
+What is the specificity of Confusion Matrix #1?
+
+To go from Confusion Matrix #1 to Confusion Matrix #2,
+did we increase or decrease the threshold value?
+
+```{r }
+# Confusion Matrix #1:
+
+#   0   1
+# 0 15  10
+# 1 05  20
+
+20/25  # sensitivity
+15/25  # specificity
+
+# Confusion Matrix #2:
+
+#   0   1
+# 0 20  05
+# 1 10  15
+
+15/25  # sensitivity
+20/25  # specificity
+
+# 從下降的 sensitivity，得到 threshold increase
+
+```
+
+## ROC
+
+The higher the threshold,or closer to (0,0),
+the higher the specificity(X軸) and the lower the sensitivity(Y軸)
+
+The lower the threshold,or closer to (1,1),
+the lower the specificity(X軸) and the higher the sensitivity(Y軸)
+
+```{r }
+
+ROCRpred = prediction(predictTrain, qualityTrain$PoorCare)
+# 先放預測，再放真的值
+
+ROCRperf = performance(ROCRpred, measure = 'tpr', x.measure = 'fpr')
+# measure = 'tpr', x.measure = 'fpr'  先放Y軸再放X軸
+
+plot(ROCRperf, colorize = TRUE)
+plot(ROCRperf, colorize = TRUE, 
+     print.cutoffs.at = seq(0,1,0.1),text.adj = c(-0.2,1.7))
+
+# print.cutoffs.at = seq(0,1,0.1) 閾值的數字
+# text.adj = c(-0.2,1.7) 讓字跟點分開
+
+```
+
+##　Quick Question
+
+This question will ask about the following ROC curve:
+
+Given this ROC curve
+
+Which threshold would you pick if you wanted to correctly identify 
+a small group of patients who are receiving the worst care with high confidence?
+
+Which threshold would you pick if you wanted to correctly identify
+half of the patients receiving poor care,while making as few errors as possible?
+
+
+```{r }
+
+# receiving the worst care with high confidence
+# threshold = 0.7
+
+# half of the patients receiving poor care,while making as few errors as possible
+# threshold = 0.3
+
+```
+
+##  Interpreting (解釋) the Model
+
+multicollinearity:多重共線性
+
+## Quick Question
+
+Compute the test set predictions in R by running the command:
+
+predictTest = predict(QualityLog, type="response", newdata=qualityTest)
+
+You can compute the test set AUC by running the following two commands in R:
+
+ROCRpredTest = prediction(predictTest, qualityTest$PoorCare)
+
+auc = as.numeric(performance(ROCRpredTest, "auc")@y.values)
+
+What is the AUC of this model on the test set?
+
+```{r }
+
+predictTest = predict(QualityLog, type="response",
+                      newdata=qualityTest)
+
+ROCRpredTest = prediction(predictTest, qualityTest$PoorCare)
+
+auc = as.numeric(performance(ROCRpredTest, "auc")@y.values)
+auc
+
+```
+
+The AUC of a model has the following nice interpretation: 
+given a random patient from the dataset who actually received poor care,
+and a random patient from the dataset who actually received good care, 
+the AUC is the perecentage of time that 
+our model will classify which is which correctly.
+
+<br><br>
