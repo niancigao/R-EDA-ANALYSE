@@ -1,0 +1,220 @@
+---
+title: UNIT10B：簡單線性回歸 Simple Linear Regression
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# Formating Codes.  Do not change the codes in this chunk.<br>
+# rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8)
+options(scipen=20, digits=5, width=80)
+if(!require(pacman)) install.packages("pacman")
+```
+<hr>
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pacman::p_load(dplyr, ggplot2, plotly, ggpubr)
+```
+
+批發商資料集
+```{r}
+W = read.csv('data/wholesales.csv')
+W$Channel = factor( paste0("Ch",W$Channel) )
+W$Region = factor( paste0("Reg",W$Region) )
+W[3:8] = lapply(W[3:8], log, base=10)
+```
+<br><hr>
+
+### [A] 用R做線性回歸 
+
++ `lm` : 方法
++ `md` : 模型
++ `Milk` : 目標變數 Response, Dependent Variable (DV)
++ `Grocery` : 預測變數 Predictor, Independent Variable (IV)
++ `W` : 資料
+
+```{r}
+md = lm(Milk ~ Grocery, W) # y ~ x1+x2+...
+```
+
+```{r}
+names(md)
+```
+<br><hr>
+
+### [B] 理論 vs 實證模型
+
++ 理論模型：$y_i = \beta_0 + \beta_1 x_i + \epsilon_i, \; \epsilon \in i.i.d.\;Normal\;Dist.$
+    + $\beta_0$, $\beta_1$ - 係數
+    + $y_i$ - 目標變數
+    + $x_i$ - 預測變數
+    + $\epsilon_i$ - 誤差 
+
++ 模型估計/預測：$\hat{y}_i = b_0 + b_1 x_i$
+    + `md$coefficient` : $b_0$, $b_1$ - 係數估計值
+    + `md$fitted.value` : $\hat{y}_i$ - 目標變數估計值
+    + `md$residuals` : $e_i = y - \hat{y}$ - 殘差 
+
+```{r}
+y = W$Milk                # 目標變數
+x = W$Grocery             # 解釋變數
+b0 = md$coef[1]           # 截距
+b1 = md$coef[2]           # 斜率
+yhat = b0 + b1 * x        # 預測值
+er = y - yhat             # 殘差 (Residual)
+```
+
+```{r}
+range(yhat - md$fitted.values)
+
+# 預測值(b0+b1*x)跟目標變數估計值(md$fitted.value) 一樣
+
+```
+
+```{r}
+range(er - md$residuals)
+
+# 殘差(er)跟殘差(md$residuals)一樣
+
+```
+<br><hr>
+
+### [C] 畫出回歸線
+
+$$ Milk_i = b_0 + b_1 Grocery_i$$
+
+```{r fig.height=3.2, fig.width=3.2}
+par(cex=0.8, mar=c(4,4,1,1))
+plot(W$Grocery, W$Milk, pch=20, col="#80808080")
+abline(b0, b1, col='red') # 截距、斜率
+
+# pch=20，點的形狀
+
+```
+
+```{r fig.height=3.7, fig.width=3.5}
+ggplot(aes(Grocery, Milk), data=W) + 
+  geom_point(alpha=0.4, size=0.8) + 
+  geom_smooth(formula=y ~ x, method="lm", level=0.95, lwd=0.2) + 
+  theme_bw() -> p
+
+# level=0.95,信賴區間、lwd=0.2,線粗細
+
+ggplotly(p)
+
+```
+
+🌻 **問題**
+
++ 為什麼大部分的資料點都沒有落在95%信心區間呢？
++ (信賴區間跟預測區間的差別)
++ 模型估計的是$y$的平均值($\bar{y}|x$)、而不是$y$本身！
+
+<br><hr>
+
+### [D] 使用模型做預測(估計)
+```{r}
+new_data = tibble(Grocery = seq(1,5,0.5))
+new_data
+```
+
+🌻 $\hat y$ 的 **信賴區間(Confidence Interval)**
+```{r}
+conf = predict(md, new_data, interval="confidence"); conf
+
+# md:模型
+# new_data:要預測的x
+# interval = "confidence" :給信賴區間，給的是y的平均值的範圍，而不是y本身
+
+```
+
+🌻 $y$ 的 **預測區間(Prediction Interval)**
+```{r}
+pred = predict(md, new_data, interval="prediction"); pred
+
+# md:模型
+# new_data:要預測的x
+# interval = "prediction" :給預測區間，給的是y本身預測出來的值
+
+```
+
+```{r}
+df = cbind(new_data,conf,pred[,-1]) 
+names(df) = c("x","yhat","c.lwr","c.upr","p.lwr","p.upr")
+df
+```
+
+```{r fig.height=3.7, fig.width=3.5, warning=F}
+ggplot(df, aes(x)) +
+  geom_point(aes(y=yhat),col='red',size=2) +
+  geom_line(aes(y=yhat),col='red') +
+  geom_line(aes(y=c.lwr),col='orange') +
+  geom_line(aes(y=c.upr),col='orange') +
+  geom_line(aes(y=p.lwr),col='magenta',linetype='dashed') +
+  geom_line(aes(y=p.upr),col='magenta',linetype='dashed') +
+  geom_point(data=W, aes(x=Grocery, y=Milk), size=0.8, alpha=0.5) +
+  xlim(1,5) + ylim(1,5) + theme_bw()
+
+# 紅線:回歸線
+# 紅點:給x後的點估計
+# 橘線:信賴區間(所有y的平均值落在的區間)
+# 粉線:預測區間(給x後95%信心一定落在的區間)
+
+```
+
+🌻 **95%預測區間(Prediction Interval)**才會涵蓋95%的$y$
+
+<br>
+
+### [E] 模型摘要功能
+```{r}
+summary(md)
+```
+
+##### § 模型的準確性
+
++ Residual standard error: 殘差的標準差 (~誤差的平均值)
++ R-squared: 模型所能解釋的(目標變數的)變異比率
+
+<span style="font-size:24px"> `r "\U1F4A1"` : </span>
+$b_1$ 係數代表平均而言， $x$ 每增加一單位時，$y$ 會增加的數量
+
++ Coefficients:
+    + Estimate: 係數估計值
+    + Std. Error: 係數估計值的標準差
+    + Pr(>|t|): $p$值 (變數之間沒有關係的機率？)
+    + Signif. codes: 顯著標記
+
+<br>
+
+##### § 係數的分布
+```{r fig.height=3.2, fig.width=7.2}
+curve(dnorm(x, 0.7352, 0.0301), from=-0.1, to=1, n=400, xlab=bquote(italic(b[1])),
+      main=bquote("The Distribution of Random Variable: " ~ italic(b[1])))
+abline(v=qnorm(c(0.025, 0.975),0.7352, 0.0301), col="red")
+
+# x = W$Grocery，440個
+# xlab = x軸標籤, ylab = y軸標籤
+# bquote:報價；italic:斜體
+# bquote:創建具有混合(1)字符串(2)表達式(3)數字的表達式，用~連接
+
+```
+
+<span style="font-size:24px"> `r "\U1F4A1"` : </span>
+係數($b_0, b_1$)也都是隨機變數，他們都會有：
+
++ 點估計：期望值、最有可能的值
++ 區間估計：某一信心水準之下估計值可能出現的區間
+
+<br><br><br><hr>
+
+
+
