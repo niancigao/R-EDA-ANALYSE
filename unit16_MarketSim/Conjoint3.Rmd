@@ -1,0 +1,144 @@
+---
+title: "族群分析與市場區隔"
+output: 
+  flexdashboard::flex_dashboard:
+    
+    theme: default
+    css: data/JH.css
+    social: menu                #右上角的分享選項
+    source_code: embed          #原始碼
+    logo: data/nsysu48.png
+    favicon: data/nsysu48.png        #網頁上的小logo
+runtime: shiny
+---
+
+```{r}
+options(shiny.usecairo = FALSE)
+pacman::p_load(magrittr,shiny,shinyWidgets,shinythemes,flexdashboard,DT)
+load("data/W2.rdata")
+library(fpc)
+```
+
+集群分析與市場區隔  {data-orientation=columns data-width=15%}
+=====================================
+
+Column 1{data-width=30%}
+-------------------------------------
+### Input {data-height=30%}
+```{r}
+
+chooseSliderSkin("Modern")
+
+sliderInput("sK", "Choose K: ",2,5,3,1)
+
+actionBttn(
+   inputId = "re",
+   label = "Reset seeding",
+   style = "unite",
+    color = "success"
+)
+
+X = reactive({
+  z = input$re; k = input$sK
+  P = matrix(rep(0, k*4 ), ncol=4)
+  U = matrix(rep(0, k*nrow(W)), ncol=k )
+  # lx = c(1,2,2)
+  # for(i in 2:k) lx = c(lx, (i-1)*2 + c(1,2,2) )
+  # h = rep.int(1,k)
+  # if(k==3) h[1]=2 else if(k>=4) h[1]=3
+  # layout(matrix(c(1,2,2,2+lx),k+1,3,byrow=T), heights=h, widths=c(1.5,1,1) )
+  sd = sample.int(1000,1); set.seed(sd)
+  S = kmeans(W,k)$cluster
+  n = as.vector(table(S))
+  # cat(k, 'segments, seed =', sd, ', N =', n, '\n')
+  m = apply(W[,2:ncol(W)], 2, function(x) tapply(x ,S, mean))
+  list(k=k, S=S, m=m, n=n, sd=sd, P=P, U=U)
+  })
+
+```
+
+### Seed數 {data-height=10%}
+```{r}
+renderPrint({
+  X()$sd
+})
+```
+
+
+### <span style="font-size:18px;">問題討論：</span> {data-height=60%}
+ 
+ 1. 同一族群的消費者，是否會有相似的價值判斷呢？為甚麼？ 
+ 2. 你可以從從儀錶板上面觀察到這種現象嗎？ 
+ 3. 分別在 k=2,3 ，找出你覺得最好的區隔？把seed記下來，大家來比看看
+ 4. 從儀錶板上面，你如何判斷某一區隔的優劣呢？ 
+ 5. 適合做產品設計的市場區隔，也適合拿來做訂價、通路、媒體嗎？
+ 6. 價值係數之外，人口統計或生活型態變數對行銷策略會有什麼幫助嗎？
+ 7. 我們要如何利用這些資訊呢？
+
+
+Column 2 {data-width=40%}
+-----------------------------------------------------------------------
+### 產品效用空間 {data-height=80%}
+```{r}
+renderPlot({
+  S = X()$S
+  dc = discrcoord(W, S)$proj[,1:2]
+  par(mar=c(4,4,2,2))
+  plot(dc[,1],dc[,2],type='p',col=col1[S],pch=19,cex=1.5,xlab="U1", ylab="U2")
+
+})
+
+```
+
+### 分群 {data-height=20%}
+```{r}
+renderPlot({
+  par(mar=c(4,4,1,2),mfcol=c(1,1))
+  table(X()$S) %>% barplot(col=col1[1:X()$k],xlab="群數",ylab="人數",family="黑體-繁 中黑")
+
+})
+```
+
+
+
+Column 3 {data-width=45%}
+-----------------------------------------------------------------------------
+### Worthiest Parts and Distribution of Utility
+```{r}
+renderPlot({
+  k = X()$k; m = X()$m; U=X()$U; S=X()$S; P=X()$P; n=X()$n
+  par(mar=c(1,2,1,2),mfrow=c(k,2))
+  for(i in 1:k) {
+    par(mar=c(2,2,2,1))
+    barplot(m[i,],las=2,axes=F,axisnames=F,col=col1[i],
+            width=.5,space=1,border=NA)
+    abline(h=0, v=c(0,3,6,9,11)+0.25 )
+    P[i,1] = which.max(m[i,1:3])
+    P[i,2] = which.max(m[i,4:6])
+    P[i,3] = which.max(m[i,7:9])
+    P[i,4] = which.max(m[i,10:11])
+    U[,i] = rowSums(W[, c(1, P[i,]+c(1,4,7,10)) ])
+    mtx = sapply(1:k, function (k) sapply(-4:13, function(x)
+      sum(U[S==k,i] >= x & U[S==k,i] < x+1 ))  )
+    mtx = t(as.matrix(mtx))
+    par(cex=0.6,mar=c(1,2,0,2))
+    barplot(mtx,las=2,ylim=c(0,30),col=col1)
+    abline(h=seq(5,25,5),col='lightgrey',lty=3)
+    z = paste(P[i,],collapse=', ')
+    text(0,28,sprintf("Produnt %d: {%s}, %.1f%%",i,z,100*n[i]/nrow(W)),cex=2,pos=4,col=col1[i])
+  }
+
+})
+```
+
+
+
+
+
+
+
+
+
+
+
+

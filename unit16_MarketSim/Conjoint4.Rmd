@@ -1,0 +1,628 @@
+---
+title: "雙產品市場模擬"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    theme: default
+    css: data/JH.css
+    social: menu
+    source_code: embed 
+    logo: data/nsysu48.png
+    favicon: data/nsysu48.png
+runtime: shiny
+---
+
+```{r}
+options(shiny.usecairo = FALSE)
+pacman::p_load(shinyWidgets,shinythemes,flexdashboard)
+pacman::p_load(conjoint,fpc,latex2exp,dplyr,highcharter)
+options(digits=4) 
+load("data/W2.rdata")
+#variable
+clr = c('magenta','blue','lightgray','gold')
+
+#function
+UT = function(v) rowSums(W[, c(1, v + c(1,4,7,10))])
+costs = list(bitter =  c(0.3, 0.2, 0.1),
+             variety = c(0.9, 0.5, 0.2),
+             kind  =   c(0.5, 0.3, 0.6),
+             arom =    c(0.7, 0.4) )
+
+PC = function(pd) {
+  2.5 + sum(sapply(1:length(att), 
+                   function(i) costs[[i]][pd[i]] )) }
+
+#to be continue
+#Qs = function(px) {}
+# q1 = sapply(p1, function(x)
+#   sum(exp(u1-x)/rowSums(cbind(rep(1,100), exp(u1-x), exp(u2-x2)))) )
+# q2 = sapply(p2, function(x)
+#   sum(exp(u2-x)/rowSums(cbind(rep(1,100), exp(u1-x1), exp(u2-x)))) )
+
+###the function calculate matrix for pspace
+profit_mx =function(pd21,pd22){
+  mc1 = PC(pd21); mc2 = PC(pd22)
+  u1 = UT(pd21); u2 = UT(pd22)
+  q1 = q2 = f0 = f1 = f2 = matrix(
+    rep(0, length(p1)*length(p2)), nrow=length(p1))
+  for(i in 1:length(p1)) for(j in 1:length(p2)) {
+    s1= u1 - p1[i]; s2 = u2 - p2[j]
+    #Multinominal Logit Model
+    #q1[i,j] = sum( s1 > 0 & s1 >= s2 )
+    q1[i,j]=sum(exp(s1)/(exp(0)+exp(s1)+exp(s2)))
+    #q2[i,j] = sum( s2 > 0 & s1 <  s2 )
+    q2[i,j]=sum(exp(s2)/(exp(0)+exp(s1)+exp(s2)))
+
+    f1[i,j] = (p1[i]-mc1) * q1[i,j]
+    f2[i,j] = (p2[j]-mc2) * q2[i,j]
+    f0 = f1  + f2 }
+    f_list=list(f0,f1,f2) #matrix list
+    return(f_list)
+  }
+
+pSpace = function(f0,f1,f2,pd21,pd22,y1,y2) {
+  m0 = max(f0); w0 = which(f0 == max(f0), arr.ind = T)
+  p1s = p1[w0[1]]; p2s = p2[w0[2]]
+ 
+  par(mfcol=c(1,1),mar=c(5,5,3,4))
+  filled.contour(p1, p2, f0, color=terrain.colors, nlevels=8,
+    plot.title=title(cex.main=1,family="serif",font=4,
+      main=sprintf("策略組合空間上的合併獲利\n( %s + %s )",
+                   paste0(pd21,collapse=""),paste0(pd22,collapse="") ),
+      xlab=TeX("$p_1^*$ (given.  $p_2$)"),
+      ylab=TeX("$p_2^*$ (given.  $p_1$)")),
+    key.title=title(main="\n合併獲利",cex.main=1),
+    key.axes=axis(4, cex.axis=1),
+    plot.axes={
+      axis(1, cex.axis=1); axis(2, cex.axis=1)
+
+      df<-data.frame(p1=p1[apply(f1,2,which.max)],p21=p2)
+      df$p22<-df$p21^2;  df$p23<-df$p21^3
+      #用點去預測均衡曲線
+      mod<-lm(p1~p21+p22+p23,data=df)
+      pre<-data.frame(p21=seq(min(p2),max(p2),0.01))
+      pre$p22<-pre$p21^2;pre$p23<-pre$p21^3
+      pref<-data.frame(predict(mod,pre))
+
+      lines(predict(mod,pre),pre$p21,col=clr[1],lwd=2)
+
+      df1<-data.frame(p2=p2[apply(f2,1,which.max)],p11=p1)
+      df1$p12<-df1$p11^2;  df1$p13<-df1$p11^3
+
+      mod<-lm(p2~p11+p12+p13,data=df1)
+      pre1<-data.frame(p11=seq(min(p1),max(p1),0.01))
+      pre1$p12<-pre1$p11^2;pre1$p13<-pre1$p11^3
+      pref1<-data.frame(predict(mod,pre1))
+      profit1=f1[which(abs(p1-y1)<0.001),which(abs(p2-y2)<0.001)]
+      profit2=f2[which(abs(p1-y1)<0.001),which(abs(p2-y2)<0.001)]
+
+      lines(pre1$p11,predict(mod,pre1),col=clr[2],lwd=2)
+      text(8.5,12,paste0(
+        "獲利一:",round(profit1,1)," 獲利二:",round(profit2,1),
+        "合併獲利:",round(profit1+profit2,1)),pos=1)
+      points(p1s,p2s,pch=8)
+      text(p1s+0.1,p2s+0.3,"最佳合作策略組合")
+      
+      ####
+      ys1<-pref[which(abs(pre1[,1]-y2)<0.001),1]
+      ys2<-pref1[which(abs(pre1[,1]-y1)<0.001),1]
+      abline(v=y1, h=y2, col='darkgray', lty=3)
+      points(ys1,y2,pch=19,col=clr[1])
+      points(y1,ys2,pch=19,col=clr[2])
+      points(y1,y2,pch=19,cex=1.5)
+    })
+
+}
+p1=p2=seq(4,12,0.1) #use for Pspace and profit_mx(function)
+
+chooseSliderSkin("Modern")
+tags$style(HTML(".js-irs-0 .irs-single, .js-irs-0 .irs-bar-edge, .js-irs-0 .irs-bar {background: magenta}"))
+tags$style(HTML(".js-irs-1 .irs-single, .js-irs-1 .irs-bar-edge, .js-irs-1 .irs-bar {background: blue}"))
+```
+
+
+市場競爭{data-orientation=columns data-icon="fa-chess-knight"} 
+================================================================
+Input A1 {data-width=250}
+-------------------------------------
+### <font color="magenta"><b>產品一(規格&價格)</b></font> {data-height=50%}
+```{r}
+prettyRadioButtons(
+  "a1", "苦味", 
+  choices = list("低"=1, "中"=2, "高"=3),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "a2", "茶種", 
+  choices = list("紅茶"=1, "綠茶"=2, "博士茶"=3),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "a3", "包裝", 
+  choices = list("茶包"=1, "茶末"=2, "茶葉"=3),
+  selected = 3, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "a4", "外加香料", choices = list("無"=1, "有"=2),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+sliderInput("x1", NULL, 5, 12,  7.9, 0.1)
+```
+
+### <font color="blue"><b>產品二(規格&價格)</b></font> {data-height=50%}
+```{r}
+prettyRadioButtons(
+  "b1", "苦味", 
+  choices = list("低"=1, "中"=2, "高"=3),
+  selected = 3, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "b2", "茶種", choices = list("紅茶"=1, "綠茶"=2, "博士茶"=3),
+  selected = 2, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "b3", "包裝", choices = list("茶包"=1, "茶末"=2, "茶葉"=3),
+  selected = 3, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "b4", "外加香料", choices = list("無"=1, "有"=2),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+sliderInput("x2", NULL, 5, 12,  6.5, 0.1)
+```
+
+```{r}
+X=reactive({
+  x1=input$x1
+  x2=input$x2
+  pd1 = as.integer(c(input$a1,input$a2,input$a3,input$a4))
+  pd2 = as.integer(c(input$b1,input$b2,input$b3,input$b4))
+  p1 = as.double(seq(4.5,12.5,0.1))
+  p2 = as.double(seq(4.5,12.5,0.1))
+  list(x1=x1,x2=x2,pd1=pd1,pd2=pd2,p1=p1,p2=p2)
+})
+
+```
+
+
+Column A2 {data-width=380}
+---------------------------------------
+### <font color="magenta"><b>產品一獲利函數</b></font> {data-height=50%}
+```{r}
+renderPlot({
+x1 = X()$x1; x2 = X()$x2 ;pd1 =X() $pd1; pd2 =X()$pd2;p1 =X()$p1;p2 =X()$p2
+
+mc1 = PC(pd1); mc2 = PC(pd2)
+u1 = UT(pd1)
+u2 = UT(pd2)
+q1 = sapply(p1, function(x)
+  sum(exp(u1-x)/rowSums(cbind(rep(1,100), exp(u1-x), exp(u2-x2)))) )
+q2 = sapply(p2, function(x)
+  sum(exp(u2-x)/rowSums(cbind(rep(1,100), exp(u1-x1), exp(u2-x)))) )
+B = cbind(exp(u1-x1), exp(u2-x2), rep(1,100)) %>% {./rowSums(.)}
+clr = c('magenta','blue','lightgray','gold')
+pf1 = q1*(p1-mc1); pf2=q2*(p2-mc2)
+xq1 = q1[abs(p1 - x1)<0.001]; xq2 = q2[abs(p2 - x2)<0.001]
+xpf1 = pf1[abs(p1 - x1)<0.001]; xpf2 = pf2[abs(p2 - x2)<0.001]
+pst1 = p1[which.max(pf1)]; pst2 = p2[which.max(pf2)]
+
+#layout(matrix(c(1,2,3,4,4,5),3,2,byrow=F),
+#       widths=c(0.9,1.2),heights=c(1,1,1.2))
+
+par(mar=c(4,2,3,1))
+plot(p1,pf1,type='l',ylim=c(0,100),main=sprintf(
+  "PD: %s\nProfit = %.1f @ %.1f (mc=%.1f)",
+  paste0(pd1,collapse=""), xpf1,x1,mc1),
+  lwd=3,col="pink",ylab="獲利",xlab="產品一價格")
+abline(v=x1,col=clr[1])
+abline(v=p1[which.max(pf1)],col='pink',lty=2,lwd=2)
+abline(h=c(20,40,60,80),col='lightgray',lty=2)
+text(max(p1)-0.5, 103,TeX(sprintf("%.1f^*",pst1)),pos=1,col=clr[1],cex=1.2)
+text(min(p1)+0.8, 103,TeX("$\\pi_1(p_1|p_2)") ,pos=1,cex=1.5,col="pink")
+})
+```
+
+### <font color="blue"><b>產品二獲利函數</b></font> {data-height=50%}
+```{r}
+renderPlot({
+
+# input = list(a1=1,a2=1,a3=3,a4=1, b1=3,b2=2,b3=3,b4=1, x1=11.6,x2=5.1)
+#  pd1 = as.integer(c(input$a1,input$a2,input$a3,input$a4))
+#  pd2 = as.integer(c(input$b1,input$b2,input$b3,input$b4))
+#  x1=11.1;x2=6.7
+x1 = X()$x1; x2 = X()$x2 ;pd1 =X() $pd1; pd2 =X()$pd2;p1 =X()$p1;p2 =X()$p2
+
+
+mc1 = PC(pd1); mc2 = PC(pd2)
+u1 = UT(pd1)
+u2 = UT(pd2)
+
+q1 = sapply(p1, function(x)
+  sum(exp(u1-x)/rowSums(cbind(rep(1,100), exp(u1-x), exp(u2-x2)))) )
+q2 = sapply(p2, function(x)
+  sum(exp(u2-x)/rowSums(cbind(rep(1,100), exp(u1-x1), exp(u2-x)))) )
+B = cbind(exp(u1-x1), exp(u2-x2), rep(1,100)) %>% {./rowSums(.)}
+clr = c('magenta','blue','lightgray','gold')
+
+pf1 = q1*(p1-mc1); pf2=q2*(p2-mc2)
+xq1 = q1[abs(p1 - x1)<0.001]; xq2 = q2[abs(p2 - x2)<0.001]
+xpf1 = pf1[abs(p1 - x1)<0.001]; xpf2 = pf2[abs(p2 - x2)<0.001]
+pst1 = p1[which.max(pf1)]; pst2 = p2[which.max(pf2)]
+
+#layout(matrix(c(1,2,3,4,4,5),3,2,byrow=F),
+#       widths=c(0.9,1.2),heights=c(1,1,1.2))
+
+par(mar=c(4,2,4,1))
+plot(p2,pf2,type='l',ylim=c(0,100),main=sprintf(
+  "PD: %s\nProfit = %.1f @ %.1f (mc=%.1f)",
+  paste0(pd2,collapse=""),xpf2,x2,mc2),
+  lwd=3,col="cyan",ylab="獲利",xlab="產品二價格")
+abline(v=x2,col=clr[2])
+abline(v=p2[which.max(pf2)],col='cyan',lty=3,lwd=2)
+abline(h=c(20,40,60,80),col='lightgray',lty=2)
+text(max(p2)-0.5, 103,TeX(sprintf("%.1f^*",pst2)),pos=1,col=clr[2],cex=1.2)
+text(min(p2)+0.8, 103,TeX("$\\pi_2(p_2|p_1)") ,pos=1,cex=1.5,col="cyan")
+
+# tb = c(xq1, xq2, nrow(W)-xq1-xq2)
+# par(mar=c(3,3,4,3))
+# pie(tb,paste0(round(tb,1),'%'),col=clr[1:3],cex.main=1.1,font=2,cex=1,
+#     main=sprintf("Panetration = %.1f%%",xq1+xq2),border='white')
+# 
+ dcs = apply(B, 1, which.max)
+# tb = table(dcs)
+
+})
+
+```
+
+
+Column A3 {data-width=440}
+-------------------------------------
+### 效用空間 {data-height=80%}
+```{r}
+renderPlot({
+# input = list(a1=1,a2=1,a3=3,a4=1, b1=3,b2=2,b3=3,b4=1, x1=11.6,x2=5.1)
+#  pd1 = as.integer(c(input$a1,input$a2,input$a3,input$a4))
+#  pd2 = as.integer(c(input$b1,input$b2,input$b3,input$b4))
+# x1=11.1;x2=6.7
+x1 = X()$x1; x2 = X()$x2 ;pd1 =X() $pd1; pd2 =X()$pd2;p1 =X()$p1;p2 =X()$p2
+
+mc1 = PC(pd1); mc2 = PC(pd2)
+u1 = UT(pd1)
+u2 = UT(pd2)
+clr = c('magenta','blue','lightgray','gold')
+B = cbind(exp(u1-x1), exp(u2-x2), rep(1,100)) %>% {./rowSums(.)}
+dcs = apply(B, 1, which.max)
+q1 = sapply(p1, function(x)
+  sum(exp(u1-x)/rowSums(cbind(rep(1,100), exp(u1-x), exp(u2-x2)))) )
+q2 = sapply(p2, function(x)
+  sum(exp(u2-x)/rowSums(cbind(rep(1,100), exp(u1-x1), exp(u2-x)))) )
+xq1 = q1[abs(p1 - x1)<0.001]; xq2 = q2[abs(p2 - x2)<0.001]
+pf1 = q1*(p1-mc1); pf2=q2*(p2-mc2)
+xpf1 = pf1[abs(p1 - x1)<0.001]; xpf2 = pf2[abs(p2 - x2)<0.001]
+pst1 = p1[which.max(pf1)]; pst2 = p2[which.max(pf2)]
+
+par(mar=c(1,1,1,1))
+plot(u1,u2,pch=20,col=clr[dcs],cex=2,cex.lab=1.2)
+abline(v=x1,col=clr[1]);abline(h=x2,col=clr[2])
+lines(x=c(x1,x1+10),y=c(x2,x2+10),col='gray',lty=3,lwd=2)
+text(mean(u1),min(u2),"U1",col="magenta",font=4)
+text(min(u1),mean(u2),"U2",col="blue",font=4)
+})
+```
+
+### 營收與獲利 {data-height=20%}
+```{r}
+renderPlot({
+x1 = X()$x1; x2 = X()$x2 ;pd1 =X() $pd1; pd2 =X()$pd2;p1 =X()$p1;p2 =X()$p2
+mc1 = PC(pd1); mc2 = PC(pd2)
+u1 = UT(pd1)
+u2 = UT(pd2)
+
+q1 = sapply(p1, function(x)
+  sum(exp(u1-x)/rowSums(cbind(rep(1,100), exp(u1-x), exp(u2-x2)))) )
+q2 = sapply(p2, function(x)
+  sum(exp(u2-x)/rowSums(cbind(rep(1,100), exp(u1-x1), exp(u2-x)))) )
+
+B = cbind(exp(u1-x1), exp(u2-x2), rep(1,100)) %>% {./rowSums(.)}
+clr = c('magenta','blue','lightgray','gold')
+pf1 = q1*(p1-mc1); pf2=q2*(p2-mc2)
+xq1 = q1[abs(p1 - x1)<0.001]; xq2 = q2[abs(p2 - x2)<0.001]
+xpf1 = pf1[abs(p1 - x1)<0.001]; xpf2 = pf2[abs(p2 - x2)<0.001]
+pst1 = p1[which.max(pf1)]; pst2 = p2[which.max(pf2)]
+
+par(mar=c(2.5,2.5,1,2))
+bp = cbind(c(xpf1,xq1*mc1,0,0),c(0,0,xpf2,xq2*mc2)) #; bp
+barplot(bp,names=c('產品一','產品二'),
+        ylim=c(0,280),col=c(clr[1],'pink',clr[2],'cyan'),
+        cex.main=1.1,border=NA )
+abline(h=seq(50,250,50),lty=3,col='gray')
+
+
+text(0.7,xpf1,round(xpf1,1),font=2,pos=3)
+text(0.7,xq1*x1,round(xq1*x1,1),font=2,pos=3)
+text(1.9,xpf2,round(xpf2,1),font=2,pos=3)
+text(1.9,xq2*x2,round(xq2*x2,1),font=2,pos=3)
+})
+```
+
+
+
+Column A4 {.tabset .tabset-fade data-width=300}
+----------------------------------------------
+<p>
+<img src="data/cm_nsysu.png" alt="CM.NSYSU" width="100" height="100" align="left"> <br>
+[中山管理學院 商業大數據平台](https://bap.cm.nsysu.edu.tw/) <br>
+<span style="font-size:11px">高英培、卓雍然</span> <br>
+</p>
+
+### 問題1
+假如市場上有一個競爭產品PD1=c(1,1,3,1)，它的價格設在$7.5 :
+
+
+1.如果我們推出相同的產品，價格設在 $7.0，結果是？<br>
+
+2.如果我們把價格升高到$7.4，結果會比較好嗎？<br>
+
+3.如果我們賣$7.4，對手會如何回應呢？<br>
+
+4.這個賽局最後的結果會是如何<br>
+
+5.如果兩個廠商的邊際成本不一樣，結果會是如何<br>
+
+6.這段練習有哪些的策略意涵？<br>
+
+
+### 問題2
+假如市場上有兩個競爭產品 PD1=c(3,3,3,2) & PD2=c(1,3,3,2) 價格分別為7.5及5.9:
+
+1.假如你是PD1，策略目標是利潤最大化，應將把價格調至多少？<br>
+
+2.假如你是PD2，你會如何回應PD1的價格調整呢？<br>
+
+3.假如你是PD1，在均衡的狀況之下你會想要調整價格嗎？你會調到什麼價格呢？<br>
+
+4.如果PD1策略目標是市占率最大化，結果會一樣嗎？<br>
+
+5.想看看，這段練習的策略意涵是什麼？<br>
+
+最後我們做一個開放性的練習，假如市場上已有一個競爭產品 PD1=c(3,3,3,2) @ $7.5 :
+你要用什麼產品和價格進入市場？為什麼？
+
+### 問題3
+假如你要在一個新市場(沒有競爭產品)裡面，規劃一條有兩個產品的產品線：
+
+你的策略目標是什麼？
+你的產品規格、價格？ 營收、獲利、滲透率？
+你確定這是達成你的策略目標最好的策略嗎？你如何才能確定？
+
+
+
+市場均衡 {data-orientation=columns data-icon="fa-chess-bishop"} 
+==============================================
+
+Column B1 {.tabset .tabset-fade data-width=20%}
+-----------------------------------------
+
+### 產品一
+```{r}
+chooseSliderSkin("Modern")
+
+HTML('<p style="color:#ef42f5";><b>產品屬性</b></p>'); hr()
+prettyRadioButtons(
+  "c1", "苦味", 
+  choices = list("低"=1, "中"=2, "高"=3),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "c2", "茶種", choices = list("紅茶"=1, "綠茶"=2, "博士茶"=3),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "c3", "包裝", choices = list("茶包"=1, "茶末"=2, "茶葉"=3),
+  selected = 3, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "c4", "外加香料", choices = list("無"=1, "有"=2),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+hr();
+
+
+```
+
+
+### 產品二
+```{r}
+HTML('<p style="color:blue";><b>產品屬性</b></p>'); hr()
+prettyRadioButtons(
+  "d1", "苦味", 
+  choices = list("低"=1, "中"=2, "高"=3),
+  selected = 3, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "d2", "茶種", choices = list("紅茶"=1, "綠茶"=2, "博士茶"=3),
+  selected = 2, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "d3", "包裝", choices = list("茶包"=1, "茶末"=2, "茶葉"=3),
+  selected = 3, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+prettyRadioButtons(
+  "d4", "外加香料", choices = list("無"=1, "有"=2),
+  selected = 1, inline=T, icon=icon("check"), 
+  status="success", animation="jelly")
+hr();
+
+
+```
+
+### 價格
+```{r}
+
+chooseSliderSkin("Modern")
+
+HTML('<p style="color:#ef42f5";> <b>產品一</b></p>')
+
+sliderInput("y1", "價格",  5, 12,  7.9, 0.1)
+hr();
+HTML('<p style="color:blue";><b>產品二</b></p>')
+
+sliderInput("y2", "價格",  5, 12,  6.5, 0.1)
+
+MX = reactive({
+  pd21 = as.integer(c(input$c1,input$c2,input$c3,input$c4))
+  pd22 = as.integer(c(input$d1,input$d2,input$d3,input$d4))
+  mx_list=profit_mx(pd21,pd22)
+  f0=mx_list[[1]];f1=mx_list[[2]];f2=mx_list[[3]]
+  list(f0=f0,f1=f1,f2=f2)
+  })
+```
+
+Column B2 {data-width=55%}
+-----------------------------------------
+### 
+```{r}
+renderPlot({
+#use for debug
+#input = list(c1=1,c2=1,c3=3,c4=1, d1=3,d2=2,d3=3,d4=1, y1=11.6,y2=5.1)
+#pd21 = as.integer(c(input$c1,input$c2,input$c3,input$c4))
+#pd22 = as.integer(c(input$d1,input$d2,input$d3,input$d4))
+#mx_list=profit_mx(pd21,pd22)
+#f0=mx_list[[1]];f1=mx_list[[2]];f2=mx_list[[3]]
+pd21 = as.integer(c(input$c1,input$c2,input$c3,input$c4))
+pd22 = as.integer(c(input$d1,input$d2,input$d3,input$d4))
+
+f0=MX()$f0;f1=MX()$f1;f2=MX()$f2
+y1 =input$y1; y2=input$y2
+pSpace(f0,f1,f2,pd21,pd22,y1,y2)
+
+})
+```
+
+
+Column B3 {.tabset .tabset-fade data-width=25%}
+------------------------------------------
+### 問題1  
+根據上圖：如果這兩個產品相互競爭，結果會是？
+
+### 問題2  
+在這個例子裏面，總共有有多少可能的雙產品組合呢？
+
+### 問題3  
+假如市場上有兩個競爭公司分別推出兩項產品<br>
+產品1=c(1,1,3,1) & 產品2=c(3,2,3,1) :
+
+1.假如你是產品1的公司，價格應調至多少以符合最佳策略?
+
+2.呈上題，對於產品1價格的調整，產品2的公司價格應調至多少以符合最佳策略?
+
+3.接著再以1、2題的模式重複模擬，最後兩間公司的價格將會有什麼現象?
+
+### 問題4  {data-height=25%}
+假如市場上有間公司推出兩項產品<br>
+產品1=c(1,1,3,1) & 產品2=c(3,2,3,1) :
+
+1.價格應調整至多少，公司會有最大收益?此時兩項產品的價格是否符合最佳策略?<br>
+
+2.此時兩項產品的總獲利為多少?
+
+3.若以改變產品屬性來增加總收益，兩項產品應如何設計?兩者的曲線將如何變化
+
+
+
+策略模擬 {data-orientation=columns data-icon="fa-chess-rook"}
+========================================
+
+Column {data-width=30%}
+-------------------------------------
+
+### 說明{data-height=45%}
+
+黃色的點為:某產品組合的最大營收策略<br>
+綠色的點為:某產品組合的最大獲利策略<br>
+
+變數介紹:<br>
+(xxxx+xxxx):產品組合<br>
+Price:在策略目標下各產品的最佳價格<br>
+Q'ty:兩產品被購買的總數量<br>
+Rev.:兩產品的總獲利<br>
+profit:兩產品的總營收<br>
+
+
+### 練習 {data-height=55%}
+
+【練習一】
+
+上圖裡面，有多少個策略是合理的呢？ <br>
+
+【練習二】
+
+看到市場模擬的結果之後，你會想要調整你的策略目標嗎？<br>
+如何調整？
+
+
+Column {data-width=70%}
+-------------------------------------
+
+### 我們把模擬的結果之中，每一個產品組合的最佳的營收和獲利畫出來:
+
+```{r}
+renderHighchart({
+  load('data/df.Rdata')
+  hchart(df,"scatter", hcaes(x=revenue,y=profit,group=opt,lab,p1,p2,q),radius=3) %>%
+    hc_plotOptions(series=list(allowPointSelect=T)) %>%
+    hc_chart(zoomType = "xy") %>% hc_add_theme(hc_theme_flat()) %>%
+    hc_tooltip(headerFormat = "",valueDecimals=1,borderWidth=2,
+               hideDelay=100,useHTML=T,padding=3,
+               pointFormat="<center>{point.lab}</center> Price: {point.p1},{point.p2}<br>
+               Q'ty: {point.q}<br> Rev.: {point.x}<br> Profit: {point.y}") %>%
+    hc_colors(hex_to_rgba(c('darkgreen','orange'), alpha = 0.5)) %>%
+    hc_legend(floating=T,align='left',verticalAlign='bottom')
+})
+
+```
+
+
+產品差異 {data-icon="fa-chess"}
+============================================================
+
+Row D1 {data-height=85%}
+------------------------------------------------------------
+### 產品組合一
+```{r}
+pd21=c(1,2,3,1)
+pd22=c(3,3,3,2)
+y1=8.1;y2=6.6
+mx_list=profit_mx(pd21,pd22)
+f0=mx_list[[1]];f1=mx_list[[2]];f2=mx_list[[3]]
+
+pSpace(f0,f1,f2,pd21,pd22,y1,y2)
+```
+
+### 產品組合二
+```{r}
+pd21=c(1,2,3,1)
+pd22=c(1,2,3,1)
+y1=6.3;y2=6.3
+mx_list=profit_mx(pd21,pd22)
+f0=mx_list[[1]];f1=mx_list[[2]];f2=mx_list[[3]]
+
+pSpace(f0,f1,f2,pd21,pd22,y1,y2)
+```
+
+Row D2 {.tabset .tabset-fade data-height=15%}
+------------------------------------------------------------
+### 練習一
+第一個產品組合為獲利最大的產品組合<br>
+在這個最佳的產品組合裡面，競爭和合作的均衡是十分接近的， 這種現象代表什麼？ 它的策略意涵是？
+
+### 練習二
+請觀察第二個產品組合:<br>
+與第一個產品組合相比，競爭和合作的均衡價格有什麼變化?<br>
+
+### 練習三
+以上兩個練習的策略意涵是?
+
+
+
