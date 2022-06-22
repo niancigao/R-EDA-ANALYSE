@@ -1,0 +1,422 @@
+---
+title: TF3_顧客、產品、營收、獲利 
+author: 卓雍然, 中山大學 管理學術研究中心
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# Installation, setup & formatting. Do not modify this code chunk.  
+#rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE) 
+options(scipen=20, digits=5, width=80, tibble.print_min=4)
+rmarkdown::find_pandoc(version = '2.7.3')
+
+if(!require(heatmaply)) install.packages("heatmaply")
+if(!require(morpheus)) devtools::install_github('cmap/morpheus.R')
+```
+
+<br>
+
+### 🦋 學習重點 
+
+<br>
+
+🌷 **清理、彙總與統計**
+
++ 資料整理的重點(沒有之一)在於：<z>依據分析對象彙總資料</z>
++ 分析對象可以是：顧客、顧客族群、品類、品項等等
+  + 將每一個分析對象整理成一個資料框，
+  + 其中每一筆資料代表一個分析對象，
+  + 每一個欄位代表分析對象的1個屬性，
+  + 常見的商業分析屬性：營收、獲利、獲利率、價格、數量、日期、族群大小等等
++ 觀察各分析對象/屬性(資料框/欄位)的分佈，有助於了解經營狀況
+
+<br>
+
+🌷 **分群統計與比較**
+
++ 我們可以利用既有的類別變數做分群 (eg., `age`, `area`)
++ 透過分群統計與比較，就可以找到各族群的特徵與重要性 
++ 族群重要性(營收/獲利貢獻)可以幫助我們設定策略重點
++ 族群特徵可以幫助我們規劃改進方案
+
+<br>
+ 
+🌷 **多變量分析**
+
++ 觀察單一變數的分佈之後，進一步的分析通常牽涉到多變數之間的關聯性
++ 分析對象數量太多的時候，我們可以做集群分析
++ 需要比較的變數太多的時候，我們可以做尺度縮減
++ 互動式的資料視覺化可以幫助我們同時比較很多對象(族群)的很多個屬性
+
+<br><hr>
+
+<br>
+```{r echo=T, message=F, cache=F, warning=F}
+rm(list=ls(all=TRUE))
+pacman::p_load(ggplot2,dplyr,heatmaply)
+load("data/tf0.rdata")
+sapply(list(cust=A0,tid=X0,items=Z0), nrow)
+
+# 看顧客數(A0)、交易筆數(X0)、資料項數(Z0)
+
+```
+<br>
+
+
+### 品項與品類 的 營收與獲利
+
+```{r}
+Z0 %>% summarise_at(vars(cust,prod,cat),n_distinct)
+
+# vars: Select variables，equivalent semantics to select()
+# summarise_at() 對選出的變數進行相同操作 需加變數名
+
+```
+
+##### 品類分析
+
+獲利貢獻(`profit`)最大的100個品類(`cat`)
+```{r fig.height=3.5, fig.width=5.5}
+col6 = c('seagreen','gold','orange',rep('red',3)) #顏色向量
+
+gg = group_by(Z0, cat) %>% summarise(
+  solds = n(),                # 賣的產品種類
+  qty = sum(qty),             # 賣出總數
+  rev = sum(price),           # 類別總收益
+  cost = sum(cost),           # 各類別總成本
+  profit = rev - cost,        # 總利潤
+  margin = 100*profit/rev     # 邊際毛利
+  ) %>% 
+  top_n(100, profit) %>%      # 獲利貢獻(profit)最大的100個品類(cat)
+  ggplot(aes(x=margin, y=rev, col=profit, label=cat)) + 
+  geom_point(size=2,alpha=0.8) + scale_y_log10() + 
+  scale_color_gradientn(colors=col6) +                   # 顏色向量
+  theme_bw()                                             # 白底
+
+# label=cat 讓cat能被展示
+# scale_y_log10() 降低極端值的視覺影響，跟錢相關通常都需要做
+
+ggplotly(gg)
+
+# 毛利率(賺得多嗎) & 營收(賣的多嗎)
+# 觀察前100名高總利潤種類的邊際毛利&帶來總收益
+# 類別320402，總利潤349458，邊際利潤23.5933，值得觀察
+
+```
+
+<span style="font-size:18px"> 🚴  練習 </span><br>
+利用以上的程式 ...
+
++ 用圖形呈現，營收貢獻(`rev`)最大的100個品類(`cat`),排除負毛利的品類  
++ 一般而言，營收較大的品類，獲利也比較大，對嗎？
+<br> 總獲利:通常對，單位獲利:不一定
++ 這兩個圖形的樣態是類似的嗎？ 不太一樣，不過都偏負相關
+
+```{r fig.height=3.5, fig.width=5.5}
+gg= group_by(Z0, cat) %>% summarise(
+  solds = n(), 
+  qty = sum(qty),
+  rev = sum(price),
+  cost = sum(cost),
+  profit = rev - cost,
+  margin = 100*profit/rev
+  ) %>% 
+  top_n(100, rev) %>% filter(margin > 0) %>%   # 營收貢獻(rev)最大的100個品類(cat)
+  ggplot(aes(x=margin, y=rev, col=profit, label=cat)) + 
+  geom_point(size=2,alpha=0.8) + scale_y_log10() + 
+  scale_color_gradientn(colors=col6) +
+  theme_bw() 
+
+ggplotly(gg)
+
+# 產品320402，邊際利潤23.5933，總利潤第1高，總收益第3高
+# 產品560402、560201毛利低但高收益--薄利多銷
+
+```
+
+
+<br><br>
+
+
+##### 品項分析
+
+
+<span style="font-size:18px"> 🚴  練習 </span><br>
+利用以上的程式 ...
+
++ 用圖形呈現，獲利貢獻(`profit`)最大的300個『品項(`prod`)』
++ 營收(`rev`)和獲利率之間有相關性嗎？負相關接近0相關 
++ 用圖形呈現，營收貢獻(`rev`)最大的300個『品項(`prod`)』 
++ 這兩個圖形的樣態是類似的嗎？不太類似，差蠻多的
+
+```{r fig.height=3.5, fig.width=7.5}
+df = group_by(Z0, prod) %>% summarise(
+  solds=n(),
+  qty=sum(qty),
+  rev=sum(price),
+  cost=sum(cost),
+  profit = rev - cost,
+  margin = 100*profit/rev)
+
+# 貢獻(`profit`) & 營收(`rev`) 和 獲利率(margin)
+# df[,'profit'] : tibble 還是能跑但是會出現警告
+# df[,'profit',T] : num
+
+L = lapply(c("profit","rev"), function(z) {
+  top_n(df, 300, df[,z,T]) %>% filter(margin > 0) %>% 
+    ggplot(aes(x=margin, y=rev, col=profit, label=prod)) + 
+    geom_point(size=1.5,alpha=0.8) +
+    scale_y_log10(limits=c(1e4,1e6)) + 
+    scale_color_gradientn(colors=col6) +
+    theme_bw() +
+    geom_text(aes(x=15,y=1e6,label=paste("top-300",z)),color="black")
+  } ) 
+
+subplot(L)
+
+```
+<br><br>
+
+
+### 顧客 的 營收與獲利
+
+##### Top500顧客
+
+```{r fig.height=3.5, fig.width=5.5}
+
+a500 = A0 %>% top_n(500, raw)
+g = ggplot(a500, aes(x=m, y=f, col=raw)) + 
+  geom_point(size=2, alpha=0.8) +
+  scale_x_log10() + scale_color_gradientn(colors=col6) + 
+  theme_bw()
+
+ggplotly(g)
+
+```
+
+
+<br><br>
+
+
+### 顧客族群 的 營收與獲利
+
+##### 依購買行為分群
+找出最多人買的`M=50`個品類
+```{r}
+M=50
+cm = Z0 %>% group_by(cat) %>% summarise(r = n_distinct(cust)/nrow(A0)) %>% 
+  arrange(desc(r)) %>% pull(cat) %>% head(M)
+
+cm  # 各品項中看顧客比例，再抓出前50大
+
+
+```
+
+做出 顧客x品類 矩陣 - `x`
+```{r}
+x = xtabs(~cust+cat, filter(Z0, cat%in%cm)) %>% as.data.frame.matrix
+x = x[,order(-colSums(x))]
+dim(x)
+
+# xtabs : Create a contingency table 
+# order : 默認 ascending，所以這裡加負號，index
+# filter : 最多人買的`M=50`個品類
+
+```
+
+用k-means做分群 - `K=160`
+```{r}
+K=160
+set.seed(1111)
+kg = kmeans(x, K, iter.max=30)$cluster 
+table(kg) %>% sort
+
+# iter.max = 30:演算法最多算30次
+# sort : decreasing = FALSE，值排序
+# 利用顧客跟品項分類
+
+```
+
+用互動圖表找出重點族群
+```{r message=F, fig.height=4, fig.width=6.5}
+
+ckg = tibble(cust=rownames(x),kg=kg,by="cust") 
+# 顧客、他是屬於哪群、by="cust":全是cust的column
+
+gdf = inner_join(A0, ckg) %>%  #把ckg的結果加入A0(各顧客)
+  group_by(kg) %>% summarise(
+  gsize = n(),           # 每群數量
+  ttRev = sum(rev),      # 總收益
+  ttProfit = sum(raw),   # 顏色:總獲利貢獻
+  avRev = mean(rev),     # 平均收益
+  avProfit = mean(raw),  # 平均獲利
+  avRecent = mean(r),    # 平均最近一次來的天數
+  avFreq = mean(f),      # Y 平均購買次數
+  avMoney = mean(m)      # X 平均客單價
+  )  
+
+filter(gdf, gsize >= 200, gsize <= 1000) %>% 
+  ggplot(aes(avMoney,avFreq,col=ttProfit,size=gsize,label=kg)) + 
+  geom_point(alpha=0.6) +
+  scale_color_gradientn(colors=c("seagreen","gold","tomato")) +
+  theme_bw() -> g
+
+ggplotly(g)
+
+# 分析數據
+# 看他們喜歡買啥東西，藉由行為變數特徵、特定模式
+# 族群數量大小不影響，反能觀察特殊族群
+# 考慮分群變數，考量因素? 找個好操作族群 EX:rfms 
+# 多找幾群多做比較
+
+```
+
+用熱圖找出各族群的購買樣態
+```{r}
+color9 = c("darkblue","green","gold","orange",rep("red",5))
+
+hmap1 = function(x, ...) { heatmaply(
+  as.data.frame.matrix(x),
+  cexRow=0.7, cexCol=0.7,   # 減小字體大小，cexRow、cexCol
+  grid_color='gray70', ...)
+}  
+
+# hmap1 拿來固定動態熱圖格式 
+
+```
+
+```{r}
+g = filter(gdf, gsize >= 200, gsize <= 800) %>% pull(kg)       # 拉出 Kg，42個
+
+a = sapply(split(x[kg %in% g,1:30], kg[kg %in% g]), colMeans)
+
+# row : 顧客，落在 g 群裡的顧客的前 30 大品項 [18,098 x 30]
+# col : 落在 g 群裡的品項，用顧客輸出
+# colMeans : 平均購買次數
+
+hmap1(a, col=color9, show_dendrogram=c(F,F))  # [30 x 42]
+
+# show_dendrogram=c(F,F) : 畫樹狀圖
+
+```
+
+##### RFM矩陣 規則分群
+
+在顧客資料框加入規則分群欄位
+```{r}
+bm = c(0, quantile(A0$m,c(.25,0.5,.75)), max(A0$m)+100)
+bf = c(0, quantile(A0$f,c(.25,0.5,.75)), max(A0$f)+100)
+A = A0 %>% mutate(
+  mx = cut(A0$m, bm, labels=paste0('M',1:4)),
+  fx = cut(A0$f, bf, labels=paste0('F',1:4)),
+  MF = paste0(mx, fx)
+  )
+
+table(A$mx, A$fx)
+
+```
+
+找出營收最大的品類
+```{r}
+cat100 = count(Z0, cat, wt=price, sort=T) %>% mutate(
+  pc=n/sum(n),         # 品項數量佔總銷售比例
+  cum.pc=cumsum(pc)    # 累積
+  ) %>% head(100)
+# sort=T，降冪
+# wt to perform weighted counts, switching the summary from n = n() to n = sum(wt)
+# 以 price 做權重
+
+cat100[c(1:5,96:100), ]
+
+```
+
+
+做出 顧客族群x品類 購買金額矩陣 
+```{r}
+Z = inner_join(Z0, A[,c('cust','MF')]) # Joining, by = "cust"
+mx0 = xtabs(price~MF+cat, filter(Z, cat %in% cat100$cat[1:30]))
+
+# wt=price & price ~ MF+cat
+
+dim(mx0)  # (16,30)
+
+```
+
+
+依購買金額矩陣製作熱圖 
+```{r}
+hmap1(mx0, col=cool_warm)   # 比較基礎不一
+
+```
+
+🌷 **正規化 - 購買比例矩陣**
+```{r}
+mx1 = mx0/rowSums(mx0)     # rowSums(mx0):每一類人數
+hmap1(mx1, col=cool_warm)
+
+# 同一基準比較(X or Y方向比率): X 方向比率
+
+# Note:
+# ggplot投在一張圖上，無法看到購買樣態
+# 多對多:熱圖
+
+```
+
+熱圖的分群功能
+```{r}
+mx2 = xtabs(price~MF+cat, filter(Z, cat %in% cat100$cat[1:20]))
+mx3 = 100*mx2/rowSums(mx2)  # 百分比
+
+hmap1(mx3, col=cool_warm, show_dendrogram=c(T,F),k_row=5) # k_row=5 分群上色
+
+```
+
+
+<br><br>
+
+### 學習重點
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 「矩陣」與「熱圖」 </span><br>
+■ 依兩類別變數做分類統計，就會產生矩陣<br>
+■ 熱圖是矩陣資料的視覺化工具<br>
+■ 熱圖不只是用顏色代表數值而已<br>
+■ 它可以對矩陣的欄與列做集群分析，分別將兩個類別變數之中相似的分類撿在一起<br>
+■ 對數轉換可以降低極端(離群))值的影響，讓熱圖的顏色更有區辨效果<br>
+■ 為了**建立比較基礎**和**加強視覺效果**，有時我們需要先對矩陣的欄、列或整個矩陣做轉化<br>
+</p class="wwl"><br>
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 「比較基礎」和「數值散佈」</span><br>
+■ 分析其實就是做比較，而比較需要有：「比較基礎」和「可比較性」<br>
+■ 資料轉換通常是為了解決「比較基礎」和「數值散佈」這兩個問題<br>
+■ 當要比較(或視覺化)的數值之間大小相距很大的時候，可以考慮：<br>
+&emsp; &emsp; § 將數值轉化為比率<br>
+&emsp; &emsp; § 做對數轉換 (`log10()`)<br>
+&emsp; &emsp; § 設定數值範圍 (`pmin()`,`pmax()`)<br>
+&emsp; &emsp; § 標準化 (standardization)<br>
+&emsp; &emsp; § 正規化 (normalization)<br>
+&emsp; &emsp; § 標準化殘差矩陣 (standardization)<br>
+</p class="wwl"><br>
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 「正規化」和「標準化」</span><br>
+基準化有兩種作法：<br>
+&emsp; ■ 正規化(Normalization)比較重視比例，它的值是單向的(從0到1)；<br>
+&emsp; ■ 標準化(Standardization)比較重視變異，它的值是雙向的，以0為基準、以標準差為單位
+</p class="wwl"><br>
+
+<br><br>
+
+
+

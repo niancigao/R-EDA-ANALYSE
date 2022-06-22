@@ -1,0 +1,125 @@
+---
+title: TF9_價格彈性與獲利
+author: 卓雍然, 中山大學 管理學術研究中心
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r}
+options(scipen=10, digits=3)
+# rm(list=ls(all=TRUE))
+pacman::p_load(dplyr, ggplot2, plotly, arules, arulesViz)
+load("data/tf0.rdata")
+```
+
+```{r}
+table(Z0$prod) %>% sort %>% tail(10) %>% names -> prod10
+prod10 # 金額最大 10 個
+
+```
+
+```{r}
+Z0 %>% filter(age %in% c('a39','a49'), prod %in% prod10) %>% 
+  group_by(prod, age, date) %>% summarise(
+    t.qty = sum(qty),             # 產品數
+    u.price = sum(price)/t.qty    # 單位平均價格
+  ) %>% 
+  ggplot(aes(x=u.price,y=t.qty,col=age)) +
+  geom_smooth(formula=y ~ x,method='lm',se=F) +
+  facet_wrap(~prod,scales="free") +
+  theme_bw()
+
+# 供需法則
+
+```
+
+```{r}
+summarise_at(Z0, vars(cust,cat,prod), n_distinct)
+```
+
+```{r}
+mx = xtabs(~cust+prod, Z0, sparse=T)  # 稀疏
+mx@x = rep(1, length(mx@x))           # length(mx@x) : 742779
+mx = mx[,order(-colSums(mx))]
+sum(colSums(mx) > 200)
+```
+
+```{r}
+mx = mx[rownames(mx) %in% A0$cust,]
+identical(rownames(mx), A0$cust)
+```
+
+```{r}
+N = 100
+px = data.frame(
+  pid = rownames(mx)[1:N],   # 前100名字
+  size = colSums(mx)[1:N],   # 前100數量
+  rev = apply(mx[,1:N], 2, function(v) mean(A0$rev[v > 0])),  # 前100項商品中，收益大於0的部分的收益平均
+  raw = apply(mx[,1:N], 2, function(v) mean(A0$raw[v > 0])),  # 前100項商品中，利潤大於0的部分的利潤平均
+  margin = apply(mx[,1:N], 2, function(v) sum(A0$raw[v>0])/sum(A0$rev[v>0]))
+  )                                                           # 前100項商品中，利潤大於0的部分的邊際利潤
+summary(px)
+```
+
+```{r fig.height=6, fig.width=6}
+ggplot(px, aes(x=rev, y=margin, text=pid)) + 
+  geom_point(aes(size=size), alpha=0.4, col='brown') +
+  theme_bw() -> p
+ggplotly(p)
+```
+
+```{r}
+Z0 %>% filter(prod %in% colnames(mx)[1:500]) %>%  # 500大產品
+  mutate(uprice = price/qty) %>%                  # 單位價格
+  group_by(prod) %>% summarise(
+    noPrice= n_distinct(uprice),                  # 同個產品的不同售價
+    maxPrice = max(uprice),                       # 最貴多少
+    minPrice = min(uprice),                       # 最便宜多少
+    avgPrice = sum(price)/sum(qty),               # 平均多少
+    totalQty = sum(qty),                          # 賣出總量
+    noOrders = n()                                # 出現多少次
+    ) %>% arrange(desc(noOrders)) %>% View
+```
+
+
+```{r}
+par(cex=0.6)
+Z0 %>% filter(prod == '4714981010038') %>% 
+  mutate(uprice = price/qty) %>%     # 單位價格
+  count(uprice) %>%                  # 賣出數量
+  {barplot(.$n, name=round(.$uprice,2), las=2)} # 名字小數點兩位
+  
+```
+
+
+
+```{r}
+A0$margin = A0$raw/A0$rev   # 每位顧客的邊際效益
+summary(A0$margin)
+
+hist(A0$margin)             # 每位顧客的邊際效益
+
+tapply(A0$margin, A0$age, mean) %>% barplot(las=2)  # 各年齡層的邊際效益
+
+table(loss=A0$margin < 0, large=A0$rev > mean(A0$rev) ) %>% prop.table %>% {round(100*.,1)}
+# 小數點後一位 
+# 負邊際效益 VS 高於平均收益
+ 
+```
+
+
+```{r}
+mutate(A0, Loss = margin < 0) %>%
+  ggplot(aes(x=rev, fill=Loss)) + 
+  geom_density(alpha=0.3) + 
+  scale_x_log10() + theme_bw()
+```
+
+
+
+<br><br><hr>
+

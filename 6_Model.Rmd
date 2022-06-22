@@ -1,0 +1,173 @@
+---
+title: TF6_建立模型 
+author: 卓雍然, 中山大學 管理學術研究中心
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+
+### 模型訓練與測試流程
+
+<center>
+
+![Fig-1: The First Model](fig/modeling.jpg)
+</center>
+
+<hr>
+
+### Loading & Preparing Data
+```{r echo=T, message=F, cache=F, warning=F}
+pacman::p_load(dplyr,ggplot2,caTools)
+# rm(list=ls(all=TRUE))
+load("data/tf3.rdata")
+```
+
+##### Spliting for Classification 
+```{r}
+TR = subset(A, spl)  # 訓練集
+TS = subset(A, !spl) # 測試集
+```
+<br><hr>
+
+### Classification Model
+```{r}
+glm1 = glm(buy ~ ., TR[,c(2:5,7:10, 12)], family=binomial()) 
+summary(glm1)
+
+# 建 Logistic 分類模型，預測會不會來，since & amount 不取
+# 這裡分 1/31前 & 後，會比 1月 預測 2月 不準，因為這是時間序列的資料
+
+```
+
+```{r}
+glm2 = step(glm1) 
+summary(glm2)
+
+# 自動挑選變數，讓 AIC 下降
+# 建 Logistic 分類模型，預測會不會來，since & amount 不取
+# 這裡分 1/31前 & 後，會比 1月 預測 2月 不準，因為這是時間序列的資料
+
+```
+
+```{r}
+pred =  predict(glm1, TS, type="response")
+cm = table(actual = TS$buy, predict = pred > 0.5); cm
+```
+
+```{r}
+acc.ts = cm %>% {sum(diag(.))/sum(.)}
+c(1-mean(TS$buy) , acc.ts)  # 準確率 : 0.69998
+```
+
+```{r}
+colAUC(pred, TS$buy)        # AUC面積 : 0.7556
+```
+<br><hr>
+
+### Regression Model
+```{r}
+A2 = subset(A, A$buy) %>% mutate_at(c("m","rev","amount"), log10)
+TR2 = subset(A2, spl2)
+TS2 = subset(A2, !spl2)
+```
+
+```{r}
+lm1 = lm(amount ~ ., TR2[,c(2:5,7:11)])
+summary(lm1)
+
+# 簡單線性回歸:預測下次來買了多少
+
+```
+
+```{r}
+lm2 = step(lm1)
+summary(lm2)
+
+# 自動挑選變數，讓 AIC 下降
+# 簡單線性回歸:預測下次來買了多少
+
+```
+
+```{r}
+r2.tr = summary(lm1)$r.sq
+SST = sum((TS2$amount - mean(TR2$amount))^ 2)
+SSE = sum((predict(lm1, TS2) -  TS2$amount)^2)
+r2.ts = 1 - (SSE/SST)
+c(R2train=r2.tr, R2test=r2.ts)
+
+# 訓練集跟測試集的 R^2，看來是沒有過擬合的現象
+
+```
+<br><hr>
+
+### 製作變數、改進模型
+
+<center>
+
+![Fig-2: Prediction](fig/improving.png)
+
+</center>
+
+
+### 進行預測
+
+<center>
+
+![Fig-3: Prediction](fig/prediction.png)
+</center>
+
+<hr>
+
+Aggregate data 2000-12-01 ~ 2001~02-28. 
+```{r}
+load("data/tf0.rdata")
+d0 = max(X0$date) + 1
+B = X0 %>% 
+  filter(date >= as.Date("2000-12-01")) %>% 
+  mutate(days = as.integer(difftime(d0, date, units="days"))) %>% 
+  group_by(cust) %>% summarise(
+    r = min(days),      # recency
+    s = max(days),      # seniority
+    f = n(),            # frquency
+    m = mean(total),    # monetary
+    rev = sum(total),   # total revenue contribution
+    raw = sum(gross),   # total gross profit contribution
+    age = age[1],       # age group
+    area = area[1],     # area code
+  ) %>% data.frame      # 28584
+nrow(B)
+
+# 11月-1月 --> 2月
+# 12月-2月 --> 3月
+
+```
+
+In `B`, there is a record for each customer. `B$Buy` is the probability of buying in March.
+```{r}
+B$Buy = predict(glm1, B, type="response")
+```
+
+<span style="font-size:24px">`r "\U1F4A1"`：</span>
+預測購買金額時要記得做指數、對數轉換！
+
+```{r}
+B2 = B %>% mutate_at(c("m","rev"), log10)
+B$Rev = 10^predict(lm1, B2) # 跟 log(1+c("m","rev")) 效果一樣
+```
+
+```{r fig.height=2.4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.8)
+hist(B$Buy)
+hist(log(B$Rev,10))
+```
+
+```{r}
+save(B, file='data/tf4.rdata')
+```
+
+<br><br><hr>
+

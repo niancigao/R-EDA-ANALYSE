@@ -1,0 +1,326 @@
+---
+title: TF2_資料探索 
+author: 卓雍然, 中山大學 管理學術研究中心
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+<br>
+```{r echo=T, message=F, cache=F, warning=F}
+# rm(list=ls(all=TRUE))
+pacman::p_load(vcd, magrittr, readr, caTools, ggplot2, dplyr, plotly)
+load("data/tf0.rdata")
+sapply(list(cust=A0,tid=X0,items=Z0), nrow)   #個別看總數量
+
+#看顧客數(A0)、交易筆數(X0)、資料項數(Z0)
+
+#得知一筆交易大概會消費7.多項產品
+#顧客大概3萬多人
+#平均每位顧客四個月來消費2.多次
+
+```
+<br>
+
+
+### 年齡與地理區隔
+```{r fig.height=2, fig.width=7}
+par(mfrow=c(1,2),cex=0.7)
+table(A0$age) %>% barplot(las=2,main="Age Groups")  #用顧客年齡分完再畫圖
+table(A0$area) %>% barplot(las=2,main="Areas")      #用顧客居住地區分完再畫圖
+
+#顧客年齡分布:發現消費族群大多為30-40的中年人
+#顧客地區分布:南港、汐止購買次數明顯偏多
+
+#可能跟距離有關?消費習慣(大採購or not)?...
+
+```
+
+![Fig-2: Zip Codes](fig/zipcode.png)
+
+<br>
+
+##### 年齡與地理區隔的關聯性
+使用馬賽克圖檢視列連表的關聯性(Association between Categorial Variables)
+
++ 方塊大小代表該類別組合的數量
++ 紅(藍)色代表該類別組合的數量顯著小(大)於期望值
++ 期望值就是邊際機率(如上方的直條圖所示)的乘積
++ 卡方檢定(類別變數的關聯性檢定)的p值顯示在圖示最下方
++ `p-value < 2.22e-16` : `age` 與 `area` 之間有顯著的關聯性
+
+
+```{r fig.height=5, fig.width=6}
+MOSA = function(formula, data) mosaic(formula, data, shade=T, 
+  margins=c(0,1,0,0), labeling_args = list(rot_labels=c(90,0,0,0)),
+  gp_labels=gpar(fontsize=9), legend_args=list(fontsize=9),
+  gp_text=gpar(fontsize=7),labeling=labeling_residuals)
+
+MOSA(~area+age, A0)   #利用馬賽克圖配合function一次定好所有格式
+
+##################################################################################################
+
+#相對於整區的"比率"，低(紅)、中(灰)、高(藍)於平均
+
+# 利用馬賽克圖找年齡跟地區的關聯性
+# p-value 很小 -> 拒絕 -> 關聯性顯著
+# 發現佔大多消費人數的汐止(221)和南港(115)顧客年齡群明顯不同
+# 汐止多落在3-40歲，中老年人數比(比率)低於平均
+# 南港多為中老年人(5-60歲)和年輕群群，中年人比率甚至低於平均
+# 其他地區也多為3-40歲族群，5-60歲少
+
+# 可能因為年齡分布?汐止多中年人?南港多中老年人?
+
+```
+<br><hr>
+
+### 簡單泡泡圖
+
+##### 年齡區隔特徵
+```{r}
+A0 %>% group_by(age) %>% summarise(               
+  Group.Size = n(),              # 族群人數
+  avg.Freq = mean(f),            # 平均購買次數
+  avg.Revenue = sum(f*m)/sum(f)  # 平均客單價
+  ) %>% 
+  ggplot(aes(y=avg.Freq, x=avg.Revenue)) +                # 給個底稿
+  geom_point(aes(col=age, size=Group.Size), alpha=0.5) +  # 加上點(顏色族群分類)
+  geom_text(aes(label=age)) +                             # 泡泡裡上文字
+  scale_size(range=c(5,25)) +                             # 泡泡大小(範圍5~25)
+  theme_bw() + theme(legend.position="none") +            # 白底+移除圖例
+  ggtitle("年齡區隔特徵 (泡泡大小:族群人數)") +           # 標題
+  ylab("平均購買次數") + xlab("平均客單價")               # X、Y軸名稱
+
+#年齡分群、次數為Y軸、單價為X軸做比較
+
+#3-40族群採取一次大量採購
+#平均購買次數大多落在3次上下
+#a99 極端值影響整張圖，使得看不出明顯差異
+
+```
+
+```{r}
+mean(A0$age == "a99")
+
+#發現離群值(沒有年齡資料的顧客)佔小比例，考慮省略
+
+```
+
+由於`a99`(沒有年齡資料的顧客)人數不多，而且特徵很獨特，探索時我們可以考慮濾掉這群顧客
+```{r}
+A0 %>% filter(age!="a99") %>%    # 濾掉沒有年齡資料的顧客('a99')
+  group_by(age) %>% summarise(
+  Group.Size = n(),              # 族群人數
+  avg.Freq = mean(f),            # 平均購買次數
+  avg.Revenue = sum(f*m)/sum(f)  # 平均客單價
+  ) %>% 
+  ggplot(aes(y=avg.Freq, x=avg.Revenue)) +
+  geom_point(aes(col=age, size=Group.Size), alpha=0.5) +
+  geom_text(aes(label=age)) +
+  scale_size(range=c(5,25)) +
+  theme_bw() + theme(legend.position="none") +
+  ggtitle("年齡區隔特徵 (泡泡大小:族群人數)") + 
+  ylab("平均購買次數") + xlab("平均客單價")
+
+#去掉離群值後明顯能分辨各族群平均購買次數
+#60多歲次數最多，單價最小
+#3-40歲次數最少，單價最高
+#次數跟單價呈負相關
+
+```
+
+##### 地理區隔特徵
+```{r}
+A0 %>% filter(age!="a99") %>%    # 濾掉沒有年齡資料的顧客('a99')
+  group_by(area) %>% summarise(
+  Group.Size = n(),              # 族群人數
+  avg.Freq = mean(f),            # 平均購買次數
+  avg.Revenue = sum(f*m)/sum(f)  # 平均客單價
+  ) %>% 
+  ggplot(aes(y=avg.Freq, x=avg.Revenue)) +
+  geom_point(aes(col=area, size=Group.Size), alpha=0.5) +
+  geom_text(aes(label=area)) +
+  scale_size(range=c(5,25)) +
+  theme_bw() + theme(legend.position="none") +
+  ggtitle("地理區隔特徵 (泡泡大小:族群人數)") + 
+  ylab("平均購買次數") + xlab("平均客單價")
+
+#地區分群、次數為Y軸、單價為X軸做比較
+
+#發現除了南港(115)、汐止(221)外其他區域平均客單價都偏高
+#可能跟距離有關，遠的地區傾向一次買齊(多)
+
+```
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"` 主要發現：</span><br>
+※ 「年齡」與「地區」之間有很高的關聯性<br>
+&emsp; &emsp; § 南港(`z115`)30~40歲的顧客比率比較低<br>
+&emsp; &emsp; § 汐止(`z221`)、內湖(`z114`)和其他(`zOthers`)30~40歲的顧客比率比較高<br>
+※ 「平均購買次數」和「平均客單價」之間有明顯的負相關<br>
+&emsp; &emsp; § 住的遠(近)的人比較少(常)來買、但每一次買的比較多(少)<br>
+&emsp; &emsp; § 30~40歲(年輕和年長)的人比較少(常)來買、但每一次買的比較多(少)<br>
+</p class="wwl"><br><hr>
+
+
+### 產品資訊
+```{r}
+# 將Z0資料集先以產品類別做分群
+# 並將各個產品類別的資訊
+#(產品數量、賣出總數、營業額、利潤、毛利率、平均售價)產生新的list
+
+cats = Z0 %>% group_by(cat) %>% summarise(
+  noProd = n_distinct(prod),   #產品種類
+  totalQty = sum(qty),         #賣出總數
+  totalRev = sum(price),       #營業額
+  totalGross = sum(price) - sum(cost),    #利潤
+  grossMargin = totalGross/totalRev,      #邊際毛利
+  avgPrice = totalRev/totalQty            #平均價格
+  )
+# 計算所有產品類別
+n_distinct(Z0$cat)
+
+```
+
+##### 品類的營收和毛利貢獻
+
+```{r fig.height=2.5, fig.width=6}
+# 先以各產品類別的營業額做排序
+# 新增兩變數(此類別收益占全部收益的比例, 累積收益比例)
+# 並列出收益前40的產品類別
+# 畫出累計長條圖
+
+g1 = arrange(cats, desc(totalRev)) %>% 
+  mutate(pc=100*totalRev/sum(totalRev), cum.pc=cumsum(pc)) %>% 
+  head(40) %>% ggplot(aes(x=1:40)) +
+  geom_col(aes(y=cum.pc),fill='cyan',alpha=0.5) +
+  geom_col(aes(y=pc), fill='darkcyan',alpha=0.5) +
+  labs(title="前40大品類(累計)營收", y="(累計)營收貢獻(%)") +
+  theme_bw()
+g1
+```
+
+```{r fig.height=2.5, fig.width=6}
+
+# 先以各產品類別的利潤做排序
+# 新增兩變數(此類別利潤占全部利潤的比例, 累積利潤比例)
+# 並列出利潤前40的產品類別
+# 畫出累計長條圖
+
+g2 = arrange(cats, desc(totalGross)) %>% 
+  mutate(pc=100*totalGross/sum(totalGross), cum.pc=cumsum(pc)) %>% 
+  head(40) %>% ggplot(aes(x=1:40)) +
+  geom_col(aes(y=cum.pc),fill='pink',alpha=0.5) +
+  geom_col(aes(y=pc), fill='magenta',alpha=0.5) +
+  labs(title="前40大品類(累計)獲利", y="(累計)獲利貢獻(%)") +
+  theme_bw()
+g2
+```
+
+```{r fig.height=3.5, fig.width=7.5}
+plotly::subplot(g1, g2)
+```
+<br>
+```{r fig.height=3.5, fig.width=7.5}
+40/n_distinct(Z0$cat)
+
+#前40項佔全的比例
+
+#品類的營收和毛利貢獻分析
+#營收前40的品類只佔全部品類的2%左右，但卻產生了38%收益，比80/20法則還猛。
+#毛利前40的品類同樣佔全部品類的2%左右，卻也產生了28%的毛利
+#可見不管是毛利或是營收前段班對整體的貢獻都是相當大的
+
+```
+<br>
+
+**品類的營收和毛利貢獻相當分散**
+
++ 營收最大的10個品類只貢獻~20%的營收
++ 毛利最大的10個品類只貢獻~12%的毛利
+
+<br>
+
+##### 品類和年齡、地區的關聯性
+```{r}
+top20 = tapply(Z0$qty,Z0$cat,sum) %>% sort %>% tail(20) %>% names
+#取出數量前20多的類別
+
+```
+
+```{r fig.height=6, fig.width=8}
+MOSA(~age+cat, Z0[Z0$cat %in% top20,])
+
+#利用馬賽克圖找出類別和年紀的關聯性，並選出cat數量最高的20種
+#p-value < 2.22e-16 : age 與 cat 之間有顯著的關聯性
+
+#大多集中在中間的年齡層
+#產品類別560204在29到44歲間的購買數量大於平均，且年齡分布較為年輕
+#產品類別100205有最多的銷售量
+#產品類別120108年齡較不會影響需求
+#年齡為39，cat100205擁有最高的銷售量
+#產品類別110106至110217於年齡層24至39歲之銷售量小於平均
+
+```
+
+```{r fig.height=6, fig.width=8}
+MOSA(~area+cat, Z0[Z0$cat %in% top20,])
+
+#利用馬賽克圖找出類別和區域的關聯性，並選出cat數量最高的20種
+#p-value < 2.22e-16 : cat 與 area 之間有顯著的關聯性
+#z115(南港)擁有最多的數量
+#產品類別120103到130315在z115(南港)的銷售量高於平均
+#產品類別110217到130315在z221(汐止))的銷售量高於平均
+
+```
+
+**不同年齡、地區的顧客喜歡買的品類看來也不太一樣**
+<br><hr>
+
+
+### 周末與周間
+```{r fig.height=2, fig.width=6}
+X0$wday = format(X0$date, "%u")
+par(cex=0.7, mar=c(2,3,2,1))
+table(X0$wday) %>% barplot(main="No. Transactions in Week Days")
+
+#將交易的數量依照週一至週日分類並以長條圖呈現，可以發現週日交易的數量為最多，週五最少。
+```
+
+##### 年齡與購物日的關聯性
+```{r fig.height=4, fig.width=5}
+MOSA(~age+wday, X0)
+
+#利用馬賽克圖找出age和weekday的關聯性
+#p-value < 2.22e-16 : age 與 weekday 之間有顯著的關聯性
+
+#34歲與39歲的族群在週日的購物人數大於平均，54歲至99歲則小於平均
+#34歲與39歲的族群在週二的購物人數小於平均
+#青壯年(34-44)在平日的購物人數小於平均，假日則著大於平均
+#24歲與年齡較大(大於59歲)者的購物人數較少
+
+```
+
+```{r fig.height=6, fig.width=8}
+df = Z0 %>% filter(cat %in% top20) %>% mutate(wday = format(date, '%u'))
+MOSA(~wday+cat, df)
+
+#利用馬賽克圖找出cat前20大和weekday的關聯性
+#p-value < 2.22e-16 : cat 與 weekday 之間有顯著的關聯性
+
+#大多類別的數量在假日大於平均
+#產品類別100205有最多數量
+#產品類別100205.100312.120103.130315.530101容易因平日與假日之影響
+
+```
+
+
+<br><hr>
+
+
+
+
+

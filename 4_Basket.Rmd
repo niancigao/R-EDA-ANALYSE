@@ -1,0 +1,83 @@
+---
+title: TF4_Basket 購物籃分析 
+author: 卓雍然, 中山大學 管理學術研究中心
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+editor_options: 
+  chunk_output_type: inline
+---
+
+<br>
+```{r echo=T, message=F, cache=F, warning=F}
+# rm(list=ls(all=TRUE))
+pacman::p_load(ggplot2,dplyr,heatmaply)
+load("data/tf0.rdata")
+sapply(list(cust=A0,tid=X0,items=Z0), nrow)   # 顧客、訂單、每筆交易
+```
+<br>
+
+```{r}
+pacman::p_load(Matrix, arules, arulesViz)
+
+# require(arules) # apriori關聯式法則的套件
+
+```
+
+```{r}
+Z0$tid %>% n_distinct # 訂單數
+```
+
+```{r}
+Z0$prod %>% n_distinct # 商品數
+```
+
+```{r}
+p = count(Z0, prod, sort=T) # 降冪，商品賣出個數
+p %>% head(20)
+
+```
+
+```{r}
+pk = p$prod[1:2000]  # 前 2000 項
+Z = filter(Z0, prod %in% pk)
+tr = as(split(Z[,"prod"], Z[,"tid"]), "transactions"); tr
+
+# length(split(Z[,"prod"], Z[,"tid"]))  # 107797
+# transactions (交易) in sparse (稀疏) format with 107797 transactions (事務) (rows) and 2000 items (columns)
+
+# split(x, f, drop = FALSE)
+# x:表示數據向量或 DataFrame
+# f:表示劃分數據的因子
+#  "transactions":交易
+
+rules <- apriori(tr, parameter=list(supp=0.0002, conf=0.5)) 
+
+# apriori : 先驗的，apriori()建立關聯規則
+# apriori 演算法
+
+# 支持度(min support)：「規則」在資料內具有普遍性，也就是這些 A 跟 B 同時出現的機率多少。
+# 信賴度(min confidence)：「規則」要有一定的信心水準，也就是當購買 A 狀態下，也會購買 B 的條件機率。
+# inspect(rules) : 觀察 rules 需要使用inspect()的函式
+
+summary(rules)
+
+```
+
+```{r}
+rx = subset(rules, subset = lift > 100 & count > 100) 
+inspect(rx)
+
+# lift 大，表示這個規則相當具有正相關
+# support 卻沒有想像中的高，這也可以理解，因為各產品佔比低，造成 support 較低也是合理的
+
+# 看是想根據 support 大小，或是 lift 大小排序 rules
+# 以下舉 lift 為例
+# sort.rule <- sort(rules, by="lift")
+# inspect(sort.rule)
+# https://rpubs.com/skydome20/R-Note6-Apriori-DecisionTree
+
+```
