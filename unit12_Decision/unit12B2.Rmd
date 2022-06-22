@@ -1,0 +1,274 @@
+---
+title: UNIT12B2：類別模型、預測機率與商業決策 
+subtitle: 預測與決策
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# Formating Codes.  Do not change the codes in this chunk !!
+# rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8)
+options(scipen=20, digits=5, width=80)
+if(!require(pacman)) install.packages("pacman")
+```
+<hr>
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pacman::p_load(caTools, ggplot2, dplyr)
+D = read.csv("data/quality.csv")  # Read in dataset
+
+set.seed(88)
+split = sample.split(D$PoorCare, SplitRatio = 0.75)  # split vector
+TR = subset(D, split == TRUE)
+TS = subset(D, split == FALSE)
+glm1 = glm(PoorCare ~ OfficeVisits + Narcotics, TR, family=binomial)
+summary(glm1)
+
+```
+<br><hr>
+
+### 【A】從預測到決策
+
+![Fig 12.3 - 從預測到決策](fig/Fig12.3.JPG)
+
+<br><hr>
+
+### 【B】預測機率分佈 (DPP)
+因為這個資料集很小，我們使用全部的資料來做模擬 (通常我們是使用測試資料集)
+```{r fig.height=3.2, fig.width=7}
+pred = predict(glm1, D, type="response")
+y = D$PoorCare
+data.frame(pred, y) %>% 
+  ggplot(aes(x=pred, fill=factor(y))) + 
+  geom_histogram(bins=20, col='white', position="stack", alpha=0.5) +
+  ggtitle("Distribution of Predicted Probability (DPP,FULL)") +
+  xlab("predicted probability")
+```
+<br><hr>
+
+### 【C】試算期望報酬
+
+**報酬矩陣 Payoff Matrix**
+
++ TN: NoAction, GoodCare; 沒事 (0)
++ FN: NoAction, PoorCare; 風險成本很高，PoorCare，不給吃藥 (-100) 
++ FP: Action, GoodCare;   預防成本，GoodCare，給吃藥，浪費藥的成本，風控的成本 (-10)
++ TP: Action, PoorCare;   預防成本 + 降低後的風險成本 (吃藥只能降低)，(-100+50-10)
+
+```{r}
+
+# 混淆矩陣(機率) * 報酬矩陣，畫成線，最高那點就是最佳期望報酬了
+# 假設、估計報酬矩陣
+
+payoff = matrix(c(0,-100,-10,-50),2,2)     # 預防成本(+60) + 降低後的風險成本(-10)
+rownames(payoff) = c("FALSE","TRUE")       # 真實狀況
+colnames(payoff) = c("NoAct","Act")        # 是否行動
+payoff
+
+```
+
+**期望報酬 Expected Payoff**
+```{r fig.height=3.2, fig.width=7}
+
+cutoff = seq(0, 1, 0.01)                                       # 每0.01畫一點，機率
+
+result = sapply(cutoff, function(p) {
+  cm = table(factor(y == 1, c(F,T)), factor(pred > p, c(F,T))) # 每個閾值下的混淆矩陣
+  sum(cm * payoff)     ### sum of confusion * payoff matrix
+  })
+
+# 混淆矩陣 table(factor(...))
+# 用factor變成類別，確保一定有0、1欄位，個數0個也無妨，2*2距陣
+# (數值的話，如果有一排全為0，矩陣可能從2*2變成1*2...，會無法對齊報酬矩陣&相乘)
+
+i = which.max(result)                                          # 取最大的index
+
+par(cex=0.7, mar=c(4,4,3,1))
+
+plot(cutoff, result, type='l', col='cyan', lwd=2,
+     main=sprintf("Optomal Expected Result: $%d @ %.2f",result[i],cutoff[i]))
+abline(v=seq(0,1,0.1),h=seq(-6000,0,100),col='lightgray',lty=3)
+points(cutoff[i], result[i], pch=20, col='red', cex=2)         # i，最佳期望報酬的點
+
+```
+<br><hr>
+
+
+🌷 因為資料點(131筆)太少，以上模擬的曲線很不平整，以下我們將資料點數擴大為10K
+
+```{r}
+library(MASS)
+d0 = subset(D, PoorCare==0)
+A0 = mvrnorm(7480, colMeans(d0[,4:5]), cov(d0[,4:5])) # 75%
+# colMeans : OfficeVisits:11.5000；Narcotics:2.0612
+# 利用多元常態分布近似，PoorCare == 0，並隨機生出 7480個樣本
+
+d1 = subset(D, PoorCare==1)
+A1 = mvrnorm(2520, colMeans(d1[,4:5]), cov(d1[,4:5])) # 25%
+
+A = rbind(A0, A1) %>% as.data.frame() 
+A$PoorCare = c(rep(0L, 7480), rep(1L, 2520))
+table(A$PoorCare)
+
+```
+
+資料框`A`之中有一萬個保戶的資料
+```{r}
+y = A$PoorCare
+pred = predict(glm1, A, type="response")    # 預測 A
+save(y, pred, payoff, file="Sim12B.Rdata")  # 存
+```
+
+```{r fig.height=3.2, fig.width=7}
+
+cutoff = seq(0, 1, 0.01)                                       # 每0.01畫一點，機率
+
+result = sapply(cutoff, function(p) {
+  cm = table(factor(y == 1, c(F,T)), factor(pred > p, c(F,T))) # 每個閾值下的混淆矩陣
+  sum(cm * payoff)     ### sum of confusion * payoff matrix
+  })
+
+# 混淆矩陣 table(factor(...))
+# 用factor變成類別，確保一定有0、1欄位，個數0個也無妨，2*2距陣
+# (數值的話，如果有一排全為0，矩陣可能從2*2變成1*2...，會無法對齊報酬矩陣&相乘)
+
+i = which.max(result)                                          # 取最大的index
+
+par(cex=0.7, mar=c(4,4,3,1))
+
+plot(cutoff, result, type='l', col='cyan', lwd=2,
+     main=sprintf("Optomal Expected Result: $%d @ %.2f",result[i],cutoff[i]))
+abline(v=seq(0,1,0.1),h=seq(-300000,-100000,25000),col='lightgray',lty=3)
+points(cutoff[i], result[i], pch=20, col='red', cex=2)         # i，最佳期望報酬的點
+
+```
+
+🌷 商務資料的通常都相當大，所以模擬曲線一般都比較平整
+
+<br><hr>
+
+### 【D】策略模擬
+
+使用`manipulate`套件，我們可以在RStudio之中做動態的模擬 ...
+
+**使用`manipulate`套件做策略模擬**
+```{r eval=F}
+# echo - 在輸出文檔中顯示代碼（默認 = TRUE）
+# eval - 在塊中運行代碼（默認 = TRUE）
+
+library(manipulate) # 操縱
+
+manipulate({
+  payoff = matrix(c(TN,FN,FP,TP),2,2)                         # 報酬矩陣
+  
+  cutoff = seq(0, 1, 0.01)
+  
+  result = sapply(cutoff, function(p) {
+    cm = table(factor(y==1, c(F,T)), factor(pred>p, c(F,T))) 
+    sum(cm * payoff) # sum of confusion * payoff matrix
+  }) / 1000
+  
+  i = which.max(result)
+  
+  par(cex=0.7)
+  
+  plot(cutoff, result, type='l', col='cyan', lwd=2, main=sprintf(
+    "Optomal Expected Result: K$%.2f @ %.2f",result[i],cutoff[i]),
+    ylim=c(-320, -120))
+  abline(v=seq(0,1,0.1),h=seq(-400,-100,25),col='lightgray',lty=3)
+  points(cutoff[i], result[i], pch=20, col='red', cex=2)
+},
+                                                  
+TN = slider(-100,0,   0,"TN(無行動)",step=5),                 # 報酬矩陣,初始值: 0
+FN = slider(-100,0,-100,"FN(平均風險成本)",step=5),           # 報酬矩陣,初始值: -100
+FP = slider(-100,0, -10,"FP(行動成本)",step=5),               # 報酬矩陣,初始值: -10
+TP = slider(-100,0, -50,"TP(行動成本+較小風險成本)",step=5)   # 報酬矩陣,初始值: -50
+) 
+
+# slider : 滑塊
+
+```
+<br>
+
+<p class="qiz">
+<span style="font-size:24px">`r "\U1F5FF"` 練習： </span><br>
+執行`Sim12.R`，先依預設的報酬矩陣回答下列問題：<br>
+&emsp; 【A】 最佳臨界機率是？ 它所對應的期望報酬是多少？<br>
+&emsp; 【B】 什麼都不做時，臨界機率和期望報酬各是多少？<br>
+&emsp; 【C】 每位保戶都做時，臨界機率和期望報酬各是多少？<br>
+&emsp; 【D】 以上哪一種做法期的望報酬比較高？<br>
+&emsp; 【E】 在所有的商務情境都是這種狀況嗎？<br><br>
+&emsp;【A】臨界機率:0.27 期望報酬:-183.11 <br>
+&emsp;【B】都不做 : 臨界機率:1 期望報酬:-250 <br>
+&emsp;【C】都做 : 臨界機率:0 期望報酬:-200 <br>
+&emsp;【D】都做 <br>
+&emsp;【E】不是，要考慮 行動成本 & 較小風險成本<br><br>
+&emsp;&emsp;&emsp; 這並不適用於每種商業情況，<br>
+&emsp;&emsp;&emsp; 因為每種商業情境的情況以及採取行動的成本都不盡相同，<br>
+&emsp;&emsp;&emsp; 所以並不是在每種情況下採取行動會比不採取來得好。<br>
+&emsp;&emsp;&emsp; 如當FP為20、TP為60時則選擇不做預期報酬會比做高<br><br>
+藉由調整報酬矩陣：<br>
+&emsp; 【F】 模擬出「全不做」比「全做」還要好的狀況<br>
+&emsp; 【G】 並舉出一個會發生這種狀況的商務情境<br><br>
+&emsp;【F】TN(無行動):0, FN(平均風險成本):-100, FP(行動成本):-20, TP(行動成本+較小風險成本):-60 <br>
+&emsp;&emsp;&emsp; 全不做: 臨界機率:1 期望報酬:-250，全做: 臨界機率:0 期望報酬:-300 <br>
+&emsp;【G】若有一間若有一個連鎖商店，<br>
+&emsp;&emsp;&emsp; 總公司決定全部分店都要使用時下最新型最昂貴的防盜器以及高階保全來防範盜竊，<br>
+&emsp;&emsp;&emsp; 但其實平均被竊盜金額不高，盜竊情況也不常發生，那麼在此情況下，<br>
+&emsp;&emsp;&emsp; 採取行動（高級防盜系統及人員）的成本就過高，導致期望報酬低。<br>
+&emsp;&emsp;&emsp; 全不做全不做就比全做要好。<br><br>
+&emsp;&emsp;&emsp; 在醫療上可能一份藥20元(FP)，可降低風險成本至40，<br>
+&emsp;&emsp;&emsp; 超過臨界機率就吃藥(就算成本高降低的風險又低) <br><br>
+有五種成本分別為`$5, $10, $15, $20, $35`的介入方法，它們分別可以將風險成本從`$100`降低到`$70, $60, $50, $40, $30` ...<br>
+&emsp; 【H】 它們的最佳期望報酬分別是多少？<br>
+&emsp; 【I】 哪一種介入方法的最佳期望報酬是最大的呢？<br><br>
+&emsp;【H】# FP:藥多貴(越左越貴)，TP:藥有效嗎(越左越沒效) <br>
+&emsp;&emsp;&emsp; (成本,風險成本) : ($5,$70),($10,$60),($15,$50),($20,$40),($35,$30) <br>
+&emsp;&emsp;&emsp; -5 & -70-5: 報償:-217.56 機率:0.27 <br>
+&emsp;&emsp;&emsp; -10 & -60-10 : 報償:-215.02 機率:0.36 <br>
+&emsp;&emsp;&emsp; -15 & -50-15 : 報償:-211.54 機率:0.36 <br>
+&emsp;&emsp;&emsp; -20 & -40-20 : 報償:-207.10 機率:0.43 <br>
+&emsp;&emsp;&emsp; -35 & -30-35 : 報償:-217.53 機率:0.48 <br>
+&emsp;【I】(成本,風險成本) : ($20,$40) : 報償:-207.10 機率:0.43 <br><br>
+</p class="qiz">
+
+
+<br><hr>
+
+🌞 **參考模擬程式**
+```{r fig.height=5, fig.width=7}
+pacman::p_load(plotly)
+
+# 報酬矩陣
+PMX = list(
+  c(0,-100, -5,-75), c(0,-100,-10,-70), c(0,-100,-15,-65),
+  c(0,-100,-20,-60), c(0,-100,-35,-65)) %>% 
+  lapply(matrix, nrow=2, ncol=2)
+
+# do.call 從名稱、函數以及要傳遞給它的參數列表，構造並執行函數調用
+do.call(rbind, lapply(1:length(PMX), function(i) {
+  
+  r = sapply(cutoff, function(p) {
+    cm = table(factor(y==1,c(F,T)), factor(pred>p,c(F,T))) 
+    sum(cm * PMX[[i]]) })
+  
+  data.frame(drug=paste0("drug_",i), cutoff=cutoff, exp.payoff=r)
+  })) %>% 
+  ggplot(aes(x=cutoff, y=exp.payoff, col=drug)) +
+  geom_line() + theme_bw() -> p
+
+ggplotly(p)
+
+```
+
+顧客價值管理:https://bap2.cm.nsysu.edu.tw/?page_id=1689
+
+<br><br><br><hr>
