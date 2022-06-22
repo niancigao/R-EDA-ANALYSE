@@ -1,0 +1,573 @@
+---
+title: TF_期中期末 
+author: 卓雍然,高念慈, 中山大學 管理學術研究中心
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+<br>
+
+### 資料彙整流程
+
+<center>
+![Fig-1:交易資料彙整](fig/aggregation.jpg)
+</center>
+
+<hr>
+
+### 1. 交易項目計錄：`Z`
+
+```{r echo=T, message=F, cache=F, warning=F}
+
+# 顧客數(A0)、交易筆數(X0)、資料項數(Z0)
+
+#rm(list=ls(all=T))
+#pacman::p_load(magrittr, readr, caTools, ggplot2, dplyr, vcd)
+pacman::p_load(magrittr, readr, caTools, ggplot2, dplyr, vcd, scales, Hmisc, foreign,lubridate, plotly, gridExtra)
+```
+
+##### 1.1 讀進資料
+```{r}
+Z = read_csv("data/ta_feng_all_months_merged.csv") %>% 
+  data.frame %>% setNames(c(
+    "date","cust","age","area","cat","prod","qty","cost","price"))
+nrow(Z)
+
+#date:交易資料、cust:顧客ID、age:年齡族群、area:區域代碼
+#cat:產品子類、prod:產品代碼、qty:數量、cost:資產、price:銷售價格
+
+#將資料套進公式read_csv()讀資料
+#再以data.frame儲存類似 Excel 表格的變數類型
+#依據交易日期、顧客ID、顧客年齡、顧客居住地區、交易項目(總)數
+#交易項目(總)數、產品(總)件數、交易(總)金額、毛利為 data frame 的列命名。
+# 找出項目比數＝817741
+
+```
+
+##### 日期格式轉換
+```{r fig.height=3.2, fig.width=7}
+Z$date = as.Date(Z$date, format="%m/%d/%Y")
+par(cex=0.8)
+hist(Z$date,'weeks',freq=T,las=2)
+
+#las=2坐標軸刻度垂直於坐標軸。
+
+#as.Date(Z$date, format="%m/%d/%Y")用來抓取月份、日、年。
+#par()生成一個含有當前圖形參數設置的列表。cex＝控制文字和繪圖符號的大小，一般大小的80%。
+#繪出直方圖，x軸＝以週為單位，y軸＝訂單數。main＝各週訂單數。
+
+```
+
+##### 年齡層級、郵遞區號
+```{r}
+#年齡級層和郵遞區號
+age.group = c("<25","25-29","30-34","35-39","40-44",
+              "45-49","50-54","55-59","60-64",">65")
+Z$age = c(paste0("a",seq(24,69,5)),"a99")[match(Z$age,age.group,11)]
+
+# match在第二個參數中返回其第一個參數的（第一個）匹配位置的向量
+#例: dict <- c('a', 'b', 'c', 'd', 'e')
+#    ref <- c('a', 'e', 'hello')
+#    match(ref, dict, 15)               答: 1,5,15
+
+
+# a99 無年齡資料的(不在範圍裡)
+
+Z$area = paste0("z",Z$area)
+```
+
+<center>
+![Fig-2:郵遞區號](fig/zipcode.png)
+</center>
+
+
+```{r fig.height=2.5, fig.width=7}
+par(mfrow=c(1,2),cex=0.7)
+table(Z$age, useNA='ifany') %>% barplot(main="Age Groups", las=2)
+table(Z$area,useNA='ifany') %>% barplot(main="Areas", las=2)
+```
+
+##### 處理離群值
+```{r}
+# Quantile of Variables
+sapply(Z[,7:9], quantile, prob=c(.99, .999, .9995))  #分位數
+```
+
+```{r}
+# Remove Outliers
+Z = subset(Z, qty<=24 & cost<=3800 & price<=4000) 
+nrow(Z)  # 原817741 後817182 
+```
+
+##### 彙總訂單 Assign Transaction ID
+把每一天、每一為顧客的交易項目彙總為一張訂單
+```{r}
+Z$tid = group_indices(Z, date, cust) # same customer same day
+
+#group_indices 是根據date和cust的類別來分群 將兩個變數都相同的分在同一群
+#這邊是另外在Z資料集新增一個變數 將函式回傳的值存到tid
+#因為是根據日期跟顧客分群，所以同一個顧客同一天的tid 會相同
+#跟 group_by 相反 一個index一個實際的分組
+########################################################################
+
+#817182
+
+#將Z資料框中，根據天數(date)跟顧客(cust)兩個欄位產生Index，叫做tid(每個組合給他一個編號)
+
+```
+
+##### 資料總覽
+```{r}
+# No. cust, cat, prod, tid
+sapply(Z[c("cust","cat","prod","tid")], n_distinct)
+
+# n_distinct() 計算明顯不同的個體數目(計算列中唯一出現的次數)
+# 一筆交易得到多個產品 <--> 那些產品共用一筆交易(tid)
+
+```
+<br><hr>
+
+### 2. 交易計錄：`X`
+
+##### 交易資料彙整
+```{r}
+X = Z %>% group_by(tid) %>% summarise(
+  date = min(date),          # 交易日期  
+  cust = min(cust),          # 顧客 ID
+  age = min(age),            # 顧客 年齡級別
+  area = min(area),          # 顧客 居住區別
+  items = n(),               # 交易項目(總)數
+  pieces = sum(qty),         # 產品(總)件數
+  total = sum(price),        # 交易(總)金額
+  gross = sum(price - cost)  # 毛利
+) %>% data.frame
+nrow(X) # 119422 
+```
+
+##### 處理離群值
+```{r}
+# Check Quantile & Remove Outliers
+sapply(X[,6:9], quantile, prob=c(.999, .9995, .9999))
+```
+
+```{r}
+# Remove Outliers
+X = subset(X, items<=62 & pieces<95 & total<16000) # 119328
+```
+
+##### 交易摘要
+```{r}
+summary(X)    
+```
+
+##### 每周交易次數
+```{r fig.height=3, fig.width=7}
+par(cex=0.8)
+hist(X$date, "weeks", freq=T, las=2, main="No. Transaction per Week")
+
+#以12月最後一個禮拜的資料筆數最低不到2000筆，次低資料筆數是2月最後一個禮拜
+
+```
+<br><hr>
+
+### 3. 顧客資料：`A`
+
+##### 顧客資料彙整
+```{r}
+d0 = max(X$date) + 1     #現在日期加 1
+
+#以今天加1為基準看同顧客購買紀錄最小天數的距離&最大天數的距離
+
+A = X %>% mutate(
+  days = as.integer(difftime(d0, date, units="days"))
+  ) %>% group_by(cust) %>% summarise(
+    r = min(days),      # recency   間隔最小天數
+    s = max(days),      # seniority   最大間隔天數
+    f = n(),            # frquency
+    m = mean(total),    # monetary 貨幣 (平均花多少)
+    rev = sum(total),   # total revenue contribution 總收入貢獻
+    raw = sum(gross),   # total gross profit contribution 總毛利貢獻
+    age = min(age),     # age group
+    area = min(area),   # area code
+  ) %>% data.frame      
+nrow(A) # 32241
+
+#difftime(time1, time2, tz,units = c(“auto”, “secs”, “mins”, “hours”,“days”, “weeks”))
+#單位= c（“自動”，“秒”，“分鐘”，“小時”，“天”，“週”））
+
+```
+
+```{r fig.height=2.5, fig.width=7.2}
+par(mfrow=c(1,2),cex=0.7)
+table(A$age, useNA='ifany') %>% barplot(main="Age Groups",las=2)
+table(A$area, useNA='ifany') %>% barplot(main="Areas",las=2)  
+
+# 第一張圖可以看出來購買人數最多的年齡是分佈在35-39歲中
+# 第二張圖可以看出來住在南港區的消費者是佔最多數的
+
+```
+
+##### 顧客摘要
+```{r}
+summary(A) 
+```
+
+```{r}
+## solution 1
+
+A.segm <- A %>% 
+  mutate(frequency = ifelse(between(f, 1, 1), "1",
+                       ifelse(between(f, 2, 2), "2", 
+                              ifelse(between(f, 3, 4), "3~4", ">4")))) %>%
+  
+  mutate(recency = ifelse(between(r, 1, 8), "<9 天",
+                       ifelse(between(r, 9, 25), "9~25 天", 
+                              ifelse(between(r, 26, 59), "26~59 天", ">59 天")))) %>%
+  arrange(cust) %>% 
+  group_by(frequency, recency) %>%
+  summarise(quantity = n()) %>%
+  mutate(client = "顧客數量") %>%
+  ungroup()
+
+A.segm$frequency <- factor(A.segm$frequency, levels = c(">4", "3~4", "2", "1"))
+A.segm$recency <- factor(A.segm$recency, levels = c(">59 天", "26~59 天", "9~25 天", "<9 天"))
+
+table(A.segm$recency)  #平均分4組
+
+lcg <- A.segm %>%
+  mutate(rec.type = ifelse(recency %in% c(">59 天", "26~59 天"), "not recent", "recent"),
+         freq.type = ifelse(frequency %in% c(">4", "3~4"), "frequent", "infrequent"),
+         customer.type = interaction(rec.type, freq.type))  #interaction:相互作用
+
+
+ggplot(lcg, aes(x=client, y=quantity, fill=customer.type)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  geom_rect(aes(fill = customer.type), xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.1) +
+  facet_grid(frequency ~ recency) +
+  geom_bar(stat='identity', alpha=0.7) +                        #y軸必需使用自己算的結果
+  geom_text(aes(y=max(quantity)/2, label=quantity), size=4) +
+  ggtitle("R與F分析圖") +
+  xlab("最近一次消費天數") + ylab("購買頻率")+ 
+  theme(plot.title = element_text(color="red", size=30 ),
+        axis.title.x = element_text(color="blue", size=20, face="bold"),
+        axis.title.y = element_text(color="#993333", size=20, face="bold"))+
+  guides(fill=guide_legend(title="客群顏色指示表"))+  
+  scale_fill_discrete(name="Experimental\nCondition",breaks = c('not recent.frequent','recent.frequent','not recent.infrequent','recent.infrequent'), labels = c('先前客','常貴客','一次性消費客人','新顧客'))
+
+#guides:指南
+#scale_fill_discrete:設置顏色
+
+## solution 2
+library(reshape2)
+
+B.segm <- A
+B.segm$r <- (B.segm$r - mean(B.segm$r)) / sd(B.segm$r)
+B.segm$f <- (B.segm$f - mean(B.segm$f)) / sd(B.segm$f)
+B.segm$m <- (B.segm$m - mean(B.segm$m)) / sd(B.segm$m)
+
+B.segm$team <- "0"
+B.segm[B.segm$r < 0 & B.segm$f > 0 & B.segm$m < 0, ]$team <- "一般價值客戶"
+B.segm[B.segm$r < 0 & B.segm$f < 0 & B.segm$m > 0, ]$team <- "重要發展客戶"
+B.segm[B.segm$r < 0 & B.segm$f > 0 & B.segm$m > 0, ]$team <- "VIP客戶"
+B.segm[B.segm$r < 0 & B.segm$f < 0 & B.segm$m < 0, ]$team <- "一般發展客戶"
+B.segm[B.segm$r > 0 & B.segm$f > 0 & B.segm$m > 0, ]$team <- "重要保持客戶"
+B.segm[B.segm$r > 0 & B.segm$f < 0 & B.segm$m > 0, ]$team <- "重要挽留客戶"
+B.segm[B.segm$r > 0 & B.segm$f < 0 & B.segm$m < 0, ]$team <- "沉睡客戶"
+B.segm[B.segm$r > 0 & B.segm$f > 0 & B.segm$m < 0, ]$team <- "一般保持客戶"
+table(B.segm$team)
+
+df <- melt(B.segm[c("r", "f", "m", "team")], id = "team")
+
+ggplot(df, aes(x = variable, y = value, group = team, fill = variable)) +
+  stat_summary(fun.y=mean, geom="bar",position=position_dodge(1)) +
+  facet_grid(~team) +
+  labs(y = "平均/標準差", fill="RFM", x = " ") +
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5),
+        text = element_text(size = 8))
+```
+
+```{r}
+
+d0 = max(X$date) + 1     #現在日期加 1
+
+#以今天加1為基準看同顧客購買紀錄最小天數的距離&最大天數的距離
+
+salesRFM = X %>% mutate(
+  days = as.integer(difftime(d0, date, units="days"))
+) %>% group_by(cust) %>% summarise(
+  Recency = min(days),      # recency   間隔最小天數
+  s = max(days),      # seniority   最大間隔天數
+  Frequency = n(),            # frquency
+  m = mean(total),    # monetary 貨幣 (平均花多少)
+  Monetary = sum(total),   # total revenue contribution 總收入貢獻
+  raw = sum(gross),   # total gross profit contribution 總毛利貢獻
+  age = min(age),     # age group
+  area = min(area),   # area code
+) %>% data.frame      
+
+```
+
+
+```{r}
+###############################################################################
+###############################################################################
+###############################################################################
+
+#R_S:基於最近一次交易日期計算得分，距離當前日期越近，則得分越高，否則得分越低；
+#F_S:基於交易頻率計算得分，交易頻率越高，則得分越高，否則得分越低；
+#M_S：基於交易金額得分，交易金額越高，則得分越高，反之得分越低。
+#同時為了對每個客戶進行綜合評價，
+#也可將以上三個得分進行加權計算
+#這裡統一採用100:10:1
+#RFM = 100 R_S + 10 F_S + 1*M_S
+
+
+#計算得分
+salesRFM <-mutate(salesRFM,
+                   rankR = 6-cut(salesRFM$Recency,
+                               breaks=quantile(salesRFM$Recency,
+                                               probs=seq(0,1,0.2),
+                                               names = FALSE),
+                               include.lowest = TRUE,labels=F),   
+                  #分數高間隔短 : 1~5分
+                  
+                   rankF = cut(salesRFM$Frequency ,
+                               breaks = c(1,2,3,4,5,85),
+#quantile(salesRFM$Frequency,probs=seq(0, 1, 0.2),names = FALSE),# 1 1 2 3 5 85
+                               include.lowest = TRUE,labels=F), 
+                  #分數高頻率高 : 1~5分
+
+                   rankM = cut(salesRFM$Monetary,
+                               breaks = quantile(salesRFM$Monetary,
+                                                 probs = seq(0, 1, 0.2),
+                                                 names = FALSE),
+                               include.lowest = TRUE,labels=F),
+                  #分數高買的總額高 : 1~5分
+
+                   rankRMF = 100*rankR + 10*rankF + 1*rankM)
+                  #加權(看我們在意的點)
+
+salesRFM <-mutate(salesRFM, 
+                  rankR1 = 1-rescale(salesRFM$Recency,to = c(0,1)),  
+                  rankF1 = rescale(salesRFM$Frequency,to = c(0,1)),  
+                  rankM1 = rescale(salesRFM$Monetary,to = c(0,1)),  
+                  rankRMF1 = 0.5*rankR + 0.3*rankF + 0.2*rankM)
+                  #把分數正規化，跟上面結果差不多
+
+
+#客戶分類
+salesRFM <- within(salesRFM,
+                   {R_S = ifelse(rankR > mean(rankR),2,1)     #分數越高越好
+                    F_S = ifelse(rankF > mean(rankF),2,1)  
+                    M_S = ifelse(rankM > mean(rankM),2,1)})
+
+salesRFM <- within(salesRFM,{Custom = NA  
+Custom[R_S == 2 & F_S == 2 & M_S == 2] = '高價值客戶'  
+Custom[R_S == 1 & F_S == 2 & M_S == 2] = '重點保持客戶'  
+Custom[R_S == 2 & F_S == 1 & M_S == 2] = '重點發展客戶'    
+Custom[R_S == 1 & F_S == 1 & M_S == 2] = '重點挽留客戶'  
+Custom[R_S == 2 & F_S == 2 & M_S == 1] = '重點保護客戶'  
+Custom[R_S == 1 & F_S == 2 & M_S == 1] = '一般保護客戶'  
+Custom[R_S == 2 & F_S == 1 & M_S == 1] = '一般發展客戶'  
+Custom[R_S == 1 & F_S == 1 & M_S == 1] = '潛在客戶'
+})                                                            #分出客群
+
+```
+
+```{r}
+#分析結果可視化
+ggplot(salesRFM,aes(rankM,fill=Custom))+
+  ggtitle("RMF分析圖(分數表)")+
+  geom_bar()+                               #在20%區間的人數(2000~0)
+  facet_grid(rankF~rankR)+
+  xlab("最近一次消費天數(5:top20%~1:80-100%)") + ylab("購買頻率(5:top20%~1:80-100%)")+
+  theme_bw()
+```
+
+```{r}
+
+#高價值客戶(消費金額高)(TOP 1-60)  
+#重點保護客戶(消費金額低)(TOP 60-100)
+#-->常貴客
+
+# Create the mode function.
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+r2f2m2 = filter(salesRFM,salesRFM$Custom =='高價值客戶')
+bind_r2f2m2 = subset(Z, Z$cust %in% r2f2m2$cust) 
+sapply(bind_r2f2m2[c("age","cat","prod",'area')], getmode) #"a39" "100205" "4714981010038" "z115"
+
+table(bind_r2f2m2$age,bind_r2f2m2$area)
+group_by(bind_r2f2m2,bind_r2f2m2$cust) %>% arrange(desc(price))
+heatmap(table(bind_r2f2m2$age,bind_r2f2m2$area))
+mosaic(~age+area, data=group_by(bind_r2f2m2,bind_r2f2m2$cust), shade=T)
+
+
+
+
+r2f2m1 = filter(salesRFM,salesRFM$Custom =='重點保護客戶')
+bind_r2f2m1 = subset(Z, Z$cust %in% r2f2m1$cust) 
+sapply(bind_r2f2m1[c("age","cat","prod",'area')], getmode) #"a34" "130315" "4714981010038" "z115" 
+
+table(bind_r2f2m1$age,bind_r2f2m1$area)
+group_by(bind_r2f2m1,bind_r2f2m1$cust) %>% arrange(desc(price))
+heatmap(table(bind_r2f2m1$age,bind_r2f2m1$area))
+mosaic(~age+area, data=group_by(bind_r2f2m1,bind_r2f2m1$cust), shade=T)
+
+
+
+
+
+
+#重點發展客戶(消費金額高)
+#一般發展客戶(消費金額低)
+#-->新顧客
+
+r2f1m2 = filter(salesRFM,salesRFM$Custom =='重點發展客戶')
+bind_r2f1m2 = subset(Z, Z$cust %in% r2f1m2$cust) 
+sapply(bind_r2f1m2[c("age","cat","prod",'area')], getmode) #"a39" "100205" "4714981010038" "z221"
+
+table(bind_r2f1m2$age,bind_r2f1m2$area)
+group_by(bind_r2f1m2,bind_r2f1m2$cust) %>% arrange(desc(price))
+heatmap(table(bind_r2f1m2$age,bind_r2f1m2$area))
+mosaic(~age+area, data=group_by(bind_r2f1m2,bind_r2f1m2$cust), shade=T)
+
+
+
+
+r2f1m1 = filter(salesRFM,salesRFM$Custom =='一般發展客戶')
+bind_r2f1m1 = subset(Z, Z$cust %in% r2f1m1$cust) 
+sapply(bind_r2f1m1[c("age","cat","prod",'area')], getmode) #"a39" "130315" "4714981010038" "z115" 
+
+table(bind_r2f1m1$age,bind_r2f1m1$area)
+group_by(bind_r2f1m1,bind_r2f1m1$cust) %>% arrange(desc(price))
+heatmap(table(bind_r2f1m1$age,bind_r2f1m1$area))
+mosaic(~age+area, data=group_by(bind_r2f1m1,bind_r2f1m1$cust), shade=T)
+
+
+#考慮利潤?
+
+
+
+
+
+
+```
+
+```{r fig.height=8}
+par(mfrow=c(3,2), mar=c(3,3,4,2))
+
+for(x in c('r','s','f','m')) 
+  hist(A[,x],20,freq=T,main=x,xlab="",ylab="",cex.main=2)
+
+hist(pmin(A$f,10),0:10,freq=T,xlab="",ylab="",cex.main=2,main="frequency")
+# 跟10比取小；x軸範圍0到10
+hist(log(A$m,10),freq=T,xlab="",ylab="",cex.main=2,main="log(money)")
+
+# cex.axis – 使用長度為 1 的數值指定刻度標籤數字/文本的大小。
+# cex.lab – 使用長度為 1 的數值指定軸標籤文本的大小。
+# cex.main – 使用長度為 1 的數值指定標題文本的大小。
+# cex.sub – 使用長度為 1 的數值指定字幕標籤的大小
+
+# r圖：大多數人最近的一筆訂單是在0-10天前發生
+# s圖：大多數人的第一筆訂單是在距今100天到四個月前
+# f圖：購買次數的分布圖，可以看出絕大多數的客人只有購買0-5次
+# m圖：購買總額分布圖，購買總金額最多分布在0-1000元
+# plim圖：一樣是購買次數分布圖，只是上限設在10次，所以可以看到在購買0-10次中大多數的人就只有買一次
+# log圖：對購買總金額取對數過後的分布圖
+
+```
+
+🌷 **偏態分佈的處理方法**
+
++ 對數轉換 - `log(A$m, 10)`
++ 固定上限 - `pmin(A$f, 10)`
+
+<br> 
+
+##### Check & Save
+```{r}
+is.na(Z) %>% colSums
+```
+
+```{r}
+is.na(X) %>% colSums
+```
+
+```{r}
+is.na(A) %>% colSums
+```
+
+```{r}
+A0 = A; X0 = X; Z0 = Z
+save(Z0, X0, A0, file="data/tf0.rdata")
+```
+
+<br><hr>
+
+### 4. 行銷企畫競賽 
+
+##### A.企畫項目
+
++ 1)利用既有和衍生的變數做顧客分群(標籤)
++ 2)根據顧客族群價值屬性，選取行銷重點、設定行銷目標
++ 3)製作模型：估計每一位顧客的：
+    + 回購機率
+    + 預期營收、預期獲利
+    + 終生價值
++ 4)根據顧客族群特徵，設計(至少兩項)行銷方案
++ 5)對方案的成本、效益進行(可以透過參數調整的)假設
++ 6)設計模擬程式，藉以： 
+    + 選擇行銷方案
+    + 設定方案參數
+    + 選擇行銷對象
+    + 估計成本效益
++ 7)做一個完整的行銷企劃報告：
+    + 經營現況
+    + 改善策略
+    + 行銷方案
+    + 預期成效
+
+##### B.評分項目
+
+1) 能從資料中找出重要的現象、結構、趨勢
+2) 能善用資料視覺化呈現重要發現
+3) 能找出特殊的、有價值的顧客族群
+4) 能找到或導出有預測力的變數
+5) 能根據分析的結果選擇策略重點、設定策略(量化)目標
+6) 能提出有效、有創意的行銷方案
+7) 能設計出合理的假設
+8) 能正確演練市場模擬的程序，清楚表達策略規劃的邏輯
+9) 整份行銷企劃的整體(影片+文案)品質
+10) 投入資源執行這一份企劃的意願
+
+<br><hr>
+
+### 5. 資料探索練習
+
++ 1)不同的年齡(或地理)族群的購買行為有什麼差異
++ 2)顧客在周末和周間的購買行為是一樣的嗎
++ 3)賣的最好的品類(品項) 
++ 4)銷售量或營收最大的品類(品項)獲利也是最大的嗎
++ 5)依據 ... 做顧客分群(市場區隔)
+    + RFM
+    + 年齡層、居住地區
+    + 曾購買的產品
+    + ...
++ 6)比較各族群的特徵
++ 7)...
++ 8)設定行銷目標和策略 
+
+##### 類別資料的分類統計
+```{r fig.height=6, fig.width=7.5}
+mosaic(~area+age, data=A, shade=T)
+```
+
+<br><br><br><br>

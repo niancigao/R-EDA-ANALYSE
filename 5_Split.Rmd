@@ -1,0 +1,242 @@
+---
+title: TF5_資料切割 
+author: 卓雍然, 中山大學 管理學術研究中心
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+<br>
+
+### 資料準備流程
+
+<center>
+
+![Fig-3: Data Preparation](fig/preparation.jpg)
+
+</center>
+
+<hr>
+
+### Preparing The Predictors (X)
+```{r echo=T, message=F, cache=F, warning=F}
+# rm(list=ls(all=TRUE))
+pacman::p_load(magrittr, caTools, ggplot2, dplyr)
+load("data/tf0.rdata")
+```
+
+```{r}
+
+sapply(list(cust=A0,tid=X0,items=Z0), nrow)   #個別看總數量
+
+# 看顧客數(A0)、交易筆數(X0)、資料項數(Z0)，已處理離群值
+
+# 得知一筆交易大概會消費7.多項產品
+# 顧客大概3萬多人
+# 平均每位顧客四個月來消費2.多次
+
+```
+
+##### The Demarcation Date
+Remove data after the demarcation (劃界) date
+```{r}
+feb01 = as.Date("2001-02-01")
+Z = subset(Z0, date < feb01)    # 618212 (Z0:已移離群值)
+```
+
+##### Aggregate (總計) for the Transaction Records (交易記錄)
+```{r}
+X = group_by(Z, tid) %>% summarise(
+  date = first(date),         # 交易日期
+  cust = first(cust),         # 顧客 ID
+  age = first(age),           # 顧客 年齡級別
+  area = first(area),         # 顧客 居住區別
+  items = n(),                # 交易項目(總)數
+  pieces = sum(qty),          # 產品(總)件數
+  total = sum(price),         # 交易(總)金額
+  gross = sum(price - cost)   # 毛利
+  ) %>% data.frame            # 88387
+
+# 跟之前的 X 內容一樣，時間: date < as.Date("2001-02-01")
+
+```
+
+```{r}
+summary(X)
+```
+
+##### Check Quantile and Remove Outlier 
+```{r}
+sapply(X[,6:9], quantile, prob=c(.999, .9995, .9999))
+```
+
+```{r}
+X = subset(X, items<=64 & pieces<=98 & total<=11260) # 88387 -> 88295  
+```
+
+### 3. 顧客資料：`A`
+##### Aggregate for Customer Records
+```{r}
+# d0 = max(X$date) + 1
+# A = X %>% mutate(
+#   days = as.integer(difftime(d0, date, units="days"))
+#   ) %>% 
+#   group_by(cust) %>% summarise(
+#     r = min(days),      # recency
+#     s = max(days),      # seniority
+#     f = n(),            # frquency
+#     m = mean(total),    # monetary
+#     rev = sum(total),   # total revenue contribution
+#     raw = sum(gross),   # total gross profit contribution
+#     age = age[1],       # age group
+#     area = area[1],     # area code
+#   ) %>% data.frame      # 28584
+# nrow(A)
+# 跟下面內容一樣，差一個 since = min(date),  # 第一次購買日期 # 看它的"日期""
+```
+
+```{r}
+d0 = max(X$date) + 1    # 現在日期加 1
+
+#以今天加1為基準看同顧客購買紀錄最小天數的距離&最大天數的距離
+
+A = X %>% mutate(
+  days = as.integer(difftime(d0, date, units="days"))
+  ) %>% group_by(cust) %>% summarise(
+    r = min(days),      # recency   間隔最小天數
+                        # 最近購買距今天數 
+                        # 選days裡面最小的
+    
+    s = max(days),      # seniority   最大間隔天數
+                        # 第一次購買距今天數
+                        # 選"天數"裡面最大的
+    f = n(),            # frquency # 購買次數
+    m = mean(total),    # monetary 貨幣 (平均花多少) # 平均購買金額
+    since = min(date),  # 第一次購買日期             # 看它的"日期""
+    rev = sum(total),   # total revenue contribution 總收入貢獻
+    raw = sum(gross),   # total gross profit contribution 總毛利貢獻
+    age = min(age),     # age group
+    area = min(area),   # area code
+  ) %>% data.frame 
+
+nrow(A) # 28584
+
+# difftime(time1, time2, tz,units = c(“auto”, “secs”, “mins”, “hours”,“days”, “weeks”))
+# 單位= c（“自動”，“秒”，“分鐘”，“小時”，“天”，“週”））
+
+```
+
+<br><br><hr>
+
+### Preparing the Target Variables (Y)
+
+##### Aggregate Feb's Transaction by Customer
+```{r}
+feb = filter(X0, date>= feb01) %>% group_by(cust) %>% 
+  summarise(amount = sum(total))  # 16900  # X0:交易筆數，時間全部
+```
+
+##### The Target for Regression - `A$amount`
+Simply a Left Joint
+```{r}
+A = merge(A, feb, by="cust", all.x=T) # 16900 項會有數據，其他 NA
+```
+
+##### The Target for Classification - `A$buy`
+```{r}
+A$buy = !is.na(A$amount)       # 有消費==目標月份會來
+table(A$buy, !is.na(A$amount)) # 13242 人會來
+```
+
+##### Summary of the Dataset
+```{r}
+summary(A)
+```
+<br><br><hr>
+
+### Preparing Train & Test Datasets
+
+##### Train & Test Dataset
+```{r}
+X = subset(X, cust %in% A$cust & date < as.Date("2001-02-01"))
+Z = subset(Z, cust %in% A$cust & date < as.Date("2001-02-01"))
+
+# length(A$cust) : 28584
+# length(X$cust) : 88295
+# n_distinct(A$cust) : 32241(全部時間顧客) --> 28584(訓練集時間) 
+# 少的數量代表 2月 新顧客數
+# n_distinct(X$cust) : 28584
+# n_distinct(Z$cust) : 28584
+# length(Z$cust) : 618212 --> 617410
+
+set.seed(2018)
+spl = sample.split(A$buy, SplitRatio=0.7)  # 回傳 TRUE & FALSE
+c(nrow(A), sum(spl), sum(!spl))
+
+# Logistic:預測下次會來嗎；訓練集7成、測試(驗證)集3成
+
+```
+
+```{r fig.height=3, fig.width=7}
+cbind(A, spl) %>% filter(buy) %>% 
+  ggplot(aes(x=log(amount))) + geom_density(aes(fill=spl), alpha=0.5)
+
+# 利用抓出會來買的，然後用 density 看訓練集跟測試集分布
+# sample.split 會幫你挑出好切割處
+
+```
+
+
+```{r}
+A2 = subset(A, buy) %>% mutate_at(c("m","rev","amount"), log10)
+n = nrow(A2)     # 13242 人會來
+set.seed(2018)
+spl2 = 1:n %in% sample(1:n, round(0.7*n)) # 用 sample 切，回傳 TRUE & FALSE
+c(nrow(A2), sum(spl2), sum(!spl2))
+
+# c("m","rev","amount") 取 log10 好觀察金錢數據
+
+# 簡單線性回歸:預測下次來買了多少；訓練集7成、測試(驗證)集3成
+
+# 有消費==目標月份會來
+# 13242 人會來
+
+```
+
+```{r fig.height=3, fig.width=7}
+cbind(A2, spl2) %>% 
+  ggplot(aes(x=amount)) + geom_density(aes(fill=spl2), alpha=0.5)
+```
+
+```{r fig.height=3, fig.width=7}
+
+spl3 = sample.split(A2$amount, SplitRatio=0.7)
+c(nrow(A2), sum(spl3), sum(!spl3))  # 13242  9601  3641
+
+cbind(A2, spl3) %>% 
+  ggplot(aes(x=amount)) + geom_density(aes(fill=spl3), alpha=0.5)
+
+# amount = sum(total)，到 1月31號(訓練集) 顧客總收益
+# 跟 spl2 切得差不多，但 spl2 前後分布更接近，故取 spl2 當分割界線
+
+```
+
+```{r}
+save(Z, X, A, spl, spl2, file="data/tf3.rdata")
+# Z, X, A 皆為到 1月31號 資料，拿來當後面(建模)預測 2月 的訓練資料
+
+```
+<br>
+
+<center>
+
+![Fig-4: Data Spliting](fig/spliting.jpg)
+
+</center>
+
+
+<br><hr>
+
