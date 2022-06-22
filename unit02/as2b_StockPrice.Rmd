@@ -1,0 +1,332 @@
+---
+title: "AS2-2: 股市動態"
+author: "Group-00"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r echo=F, results='hide', message=FALSE, warning=FALSE}
+# Installation, setup & formatting. Do not modify this code chunk.  
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8); options(scipen=20, digits=4, width=90)
+if(!require(pacman)) install.packages("pacman")
+if(!require(dplyr)) install.packages("dplyr")
+pacman::p_load(dplyr)
+```
+
+🌷  使用長期股價資料，這份作業的學習重點是： 
+
++ 使用`lapply()`對集合物件做重複的運算 
++ 使用折線圖檢視時間序列資料
++ 在折線圖中增加更多序列進行比較 
+
+First of all, we `read.csv()` the following data files 
++ `data/IBMStock.csv`
++ `data/GEStock.csv`
++ `data/ProcterGambleStock.csv`
++ `data/CocaColaStock.csv`
++ `data/BoeingStock.csv` 
+
+into data frames `IBM`、`GE`、`PnG`、`CocaCola` and `Boeing` 
+and put these data frame in a list object `L`.  
+
+```{r}
+L = list(
+  IBM = read.csv("data/IBMStock.csv"),
+  GE = read.csv("data/GEStock.csv"),
+  PnG = read.csv("data/ProcterGambleStock.csv"),
+  Coke = read.csv("data/CocaColaStock.csv"),
+  Boeing = read.csv("data/BoeingStock.csv"))
+```
+
+We say a `list` is a collective object because it accommodate more than one sub-elements. Collectives are also regarded as <z>iteratives</z>, because we can apply some function on each of their elements repeatedly.  For examples ... 
+
+🌻 `lapply(x, fun)` applies fun to each element of `x` and return the results in a list
+```{r}
+lapply(L, class)
+```
+
+🌻 `sapply(x, fun)` do the same thing as `lapply` plus it simplified the resultant object whenever it's possible ...
+```{r}
+sapply(L, class)
+```
+Here it returns a named vector which is simpler than a list.   
+
+```{r}
+sapply(L, names)
+```
+In one line of code, we see that there are two columns `Date` and `StockPrice` in each of these data frames  
+
+Besides the build in functions, we can define our own functions,  For an example ... 
+```{r}
+L = lapply(L, function(df) {
+  df$Date =  as.Date(df$Date, format="%m/%d/%y")
+  df
+  } )
+```
+We define and apply a function that takes a data frame `df`, converts the `Date` column and returns the data frame. When we apply it to `L`, we accomplish 5 date conversion operations in one shoot. 
+
+You'd find it easier in answering the following questions by `lapply` and `sapply`.
+<br>
+
+
+###  Section-1 Summary Statistics
+
+__§ 1.1__ Our five datasets all have the same number of observations. How many observations are there in each data set?
+```{r}
+
+#480 observations
+IBM=read.csv('data/IBMstock.csv')
+GE=read.csv('data/GEstock.csv')
+PG=read.csv('data/ProcterGambleStock.csv')
+CO=read.csv('data/CocaColastock.csv')
+BOE=read.csv('data/Boeingstock.csv')
+lapply(L, nrow)
+
+```
+
+
+__§ 1.2__ What is the earliest year in our datasets?
+```{r}
+
+#1970-01-01
+
+#轉換成字串再轉換成Date
+IBM$Date=as.character(IBM$Date) %>% as.Date('%m/%d/%y')
+GE$Date=as.character(GE$Date) %>% as.Date('%m/%d/%y')
+PG$Date=as.character(PG$Date) %>% as.Date('%m/%d/%y')
+CO$Date=as.character(CO$Date) %>% as.Date('%m/%d/%y')
+BOE$Date=as.character(BOE$Date) %>% as.Date('%m/%d/%y')
+lapply(L, function(df){
+  min(df$Date)
+}) 
+
+
+```
+
+__§ 1.3__ What is the latest year in our datasets?
+```{r}
+#算出IBM最近的日期
+max (IBM$Date)
+
+```
+
+__§ 1.4__ What is the mean stock price of IBM over this time period?
+```{r}
+#算出IBM平均股價
+mean(IBM$StockPrice)
+
+```
+
+__§ 1.5__ What is the minimum stock price of General Electric (GE) over this time period?
+```{r}
+#算出GE最低股價
+min(GE$StockPrice)
+
+```
+
+__§ 1.6__ What is the maximum stock price of Coca-Cola over this time period?
+```{r}
+#算出CO最高股價
+max(CO$StockPrice)
+
+```
+
+__§ 1.7__ What is the median stock price of Boeing over this time period?
+```{r}
+#算出BOE股價中位數
+median(BOE$StockPrice)
+
+```
+
+__§ 1.8__ What is the standard deviation of the stock price of Procter & Gamble over this time period?
+```{r}
+#算出PG股價標準差
+sd(PG$StockPrice)
+
+```
+
+<br><hr>
+
+###  Section-2 Visualizing Stock Dynamics
+
+__§ 2.1__ Around what year did Coca-Cola has its highest stock price in this time period? Around what year did Coca-Cola has its lowest stock price in this time period?
+```{r}
+plot(CO$Date, CO$StockPrice, type='l') #type='l'代表線圖
+
+#算出CO最高股價的日期
+subset(CO$Date, CO$StockPrice == max(CO$StockPrice))
+
+#算出CO最低股價的日期
+subset(CO$Date, CO$StockPrice == min(CO$StockPrice))
+
+#max:1973-01-01,min:1980-03-01
+
+```
+
+
+__§ 2.2__ In March of 2000, the technology bubble burst, and a stock market crash occurred. According to this plot, which company's stock dropped more?
+```{r}
+plot(IBM$Date, IBM$StockPrice,type='l',col='orange')
+#畫一張圖(不要再加一個plot，會畫第二張圖)
+lines(GE$Date, GE$StockPrice,type='l',col='cyan')
+lines(PG$Date, PG$StockPrice,type='l',col='blue')
+lines(CO$Date, CO$StockPrice,type='l',col='green')
+lines(BOE$Date, BOE$StockPrice,type='l',col='pink')
+abline(v=as.Date(c("2000-03-01","1983-01-01","1984-01-01")),col='gray',lty=3)  #v代表垂直 #哪一些日期要畫輔助線 #先定義字串向量再用as.Date住換成日期
+
+#PG
+
+```
+
+__§ 2.3__ (a) Around 1983, the stock for one of these companies (Coca-Cola or Procter and Gamble) was going up, while the other was going down. Which one was going up? 
+```{r}
+plot(CO$Date,CO$StockPrice,type = "l",col="green")
+lines(PG$Date, PG$StockPrice,col="blue")
+abline(v=as.Date(c("1983-06-15")))
+
+#Coca-Cola
+
+```
+
+(b) In the time period shown in the plot, which stock generally has lower values?
+```{r}
+plot(CO$Date,CO$StockPrice,type = "l",col="green")
+lines(PG$Date, PG$StockPrice,col="blue")
+
+#Coca-Cola
+
+```
+
+
+<br><hr>
+
+###  Section-3 Visualizing Stock Dynamics 1995-2005
+
+__§ 3.1__ Which stock fell the most right after the technology bubble burst in March 2000?
+```{r}
+plot(IBM$Date, IBM$StockPrice,type='l',col='orange', ylim=c(0,210)) 
+lines(GE$Date, GE$StockPrice,type='l',col='cyan')
+lines(PG$Date, PG$StockPrice,type='l',col='blue')
+lines(CO$Date, CO$StockPrice,type='l',col='green')
+lines(BOE$Date, BOE$StockPrice,type='l',col='pink')
+abline(v=as.Date("2000-03-01"))
+
+#GE
+
+```
+
+__§ 3.2__ Which stock reaches the highest value in the time period 1995-2005?
+```{r}
+plot(IBM$Date, IBM$StockPrice,type='l',col='orange', xlim=as.Date(c('1995-01-01','2005-12-01')),ylim=c(0,250)) #設定y軸區域
+lines(GE$Date, GE$StockPrice,type='l',col='cyan')
+lines(PG$Date, PG$StockPrice,type='l',col='blue')
+lines(CO$Date, CO$StockPrice,type='l',col='green')
+lines(BOE$Date, BOE$StockPrice,type='l',col='pink')
+
+#IBM
+
+```
+
+__§ 3.3__ In October of 1997, there was a global stock market crash that was caused by an economic crisis in Asia. Comparing September 1997 to November 1997, which companies saw a decreasing trend in their stock price? (Select all that apply.)
+```{r}
+IBM$StockPrice[IBM$Date %in% as.Date(c("1997-09-01","1997-11-01"))]
+
+GE$StockPrice[GE$Date %in% as.Date(c("1997-09-01","1997-11-01"))]
+
+PG$StockPrice[PG$Date %in% as.Date(c("1997-09-01","1997-11-01"))]
+
+CO$StockPrice[CO$Date %in% as.Date(c("1997-09-01","1997-11-01"))]
+
+BOE$StockPrice[BOE$Date %in% as.Date(c("1997-09-01","1997-11-01"))]
+
+#PG.BOE
+```
+
+__§ 3.4__ In the last two years of this time period (2004 and 2005) which stock seems to be performing the best, in terms of increasing stock price?
+```{r}
+plot(IBM$Date, IBM$StockPrice,type='l',col='orange', xlim=as.Date(c('2004-01-01','2005-12-01')),ylim=c(0,120)) #設定y軸區域
+lines(GE$Date, GE$StockPrice,type='l',col='cyan')
+lines(PG$Date, PG$StockPrice,type='l',col='blue')
+lines(CO$Date, CO$StockPrice,type='l',col='green')
+lines(BOE$Date, BOE$StockPrice,type='l',col='pink')
+
+#BOE
+
+```
+
+
+<br><hr>
+
+
+### Section-4 Monthly Trends
+
+__§ 4.1__ For IBM, compare the monthly averages to the overall average stock price. In which months has IBM historically had a higher stock price (on average)? Select all that apply.
+```{r}
+tapply(IBM$StockPrice,format(IBM$Date,'%m'),mean) #用format把IBM轉成月份再算出各月平均 
+
+mean(IBM$StockPrice)
+
+#1.2.3.4.5月
+```
+
+__§ 4.2__ General Electric and Coca-Cola both have their highest average stock price in the same month. Which month is this?
+```{r}
+tapply(GE$StockPrice,format(GE$Date,'%m'),mean) #用format把GE轉成月份再算出各月平均 
+tapply(CO$StockPrice,format(CO$Date,'%m'),mean)
+
+#4月
+```
+
+__§ 4.3__ For the months of December and January, every company's average stock is higher in one month and lower in the other. In which month are the stock prices lower?
+```{r}
+sapply(L,function(df)(tapply(df$StockPrice,format(df$Date,'%m'),mean))) #sapply五支股票1至12月作排列 #sapply(x,fun)對x裡面的每一個子物件執行fun功能並把輸出整理成矩陣 
+  
+#12月
+```
+
+<br><br>
+
+
+![](../etc/ninja.png){height=80}
+
+##### ● NINJA's DOJO ●
+
+By combining `tapply` and `sapply`, we can acquire the monthly average stock prices for every stocks  ... 
+```{r}
+mx = sapply(L, function(df) {
+  tapply(df$StockPrice, format(df$Date, "%m"), mean) })
+mx
+```
+❓ Can you see how it works?<br>
+
+🌻 `apple()` applies a function to a two dimensional object in either row or column direction (specified by its second argument, see online help for detail.)    
+```{r}
+apply(mx, 2, which.max)
+```
+So we can answer questions `4.1` and `4.2` in one shoot.
+
+To answer `4.3` we need to compare the monthly averages of January and December for the 5 stocks.  We simply use an index that select the 1st and the 12th rows of `mx` ...   
+```{r}
+mx[c(1,12),]
+```
+
+🌷 This is what we mean by **analysis** - organizing data in a way that serves our interest. 
+
+<br><p class="wwl">
+<span style="font-size:18px">`r "\U1F4A1"` The `apply` Family：</span><br>
+R's major mechanism for iteration is the `apply()` functions ...  
+ ■ `tapply(x, category, fun)` applies `fun` to `x` by `category`<br>
+ ■ `lapply(x, fun)` applies `fun` to each elements of `x` and returns a list<br>
+ ■ `sapply(x, fun)` same as `lapply` but simply the return object whenever possible<br>
+ ■ `apply(x, margin, fun)` applies `fun` to every row (column) of `x` when margin is set to 1 (2)<br>
+</p class="wwl">
+
+<br><br><br>
+

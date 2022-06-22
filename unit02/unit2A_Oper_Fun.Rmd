@@ -1,0 +1,194 @@
+---
+title: UNIT2A：向量運算與功能呼叫
+author: Tony Chuo, NSYSU
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r  echo=F, results='hide', message=FALSE, warning=FALSE}
+# Basic installation, setup & formatting.  Do not modify this code chunk.  
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8); options(scipen=20, digits=4, width=90)
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(magrittr)
+```
+<br><hr>
+
+### 1. 向量運算 Vector Computation
+
+👉 [R:主要運算符號](https://www.statmethods.net/management/operators.html)<br><br>
+
+##### 1.1 向量數學運算 Mathmatical Opeartions
+
+&emsp; ■ 剛開始的時候，R的首要功能就是做向量(`vector`)運算<br>
+&emsp; ■ 大多數R的運算符號和功能函數都主要都是對向量做計算<br>
+&emsp; ■ <u>數學運算</u>符號和功能函數運算之後會產生<u>數值向量</u><br>
+
+🌻 Bi-Operant Math Operations act Element-wise
+```{r}
+c(1, 2, 3, 4) * c(1, 10, 100, 1000)
+```
+
+🌻 When the lengths of the vectors are different ...
+```{r}
+c(100, 200, 300, 400) / 10
+```
+
+The shorter vector are repeated silently
+```{r}
+c(100, 200, 300, 400) / c(10, 20)
+```
+
+There is a warning when ...
+```{r}
+c(10,20,30,40,50,60,70,80) + c(1,2,3)
+```
+<br><br>
+
+##### 1.2 向量邏輯(條件)運算 Logical/Conditional OP.
+
+Logical Operations do __comparisons__ and produce __logical__ vectors<br>
+
+&emsp; ■ <u>邏輯(條件)運算</u>符號和功能函數運算之後會產生<u>邏輯向量</u><br>
+
+They compare numerics, strings, factors, Date, ...
+```{r}
+c(0.1, 0.2, 0.3, 0.4) > c(0, 1, 2, 3)
+```
+
+shorten vectors are also repeated
+```{r}
+c(100, 200, 300, 400) > 250
+```
+
+❓ what happen if I do ...
+```{r eval=F}
+c(200, 300) > c(100, 200, 300, 400)
+```
+<br>
+
+🌻 Test for equivalence (`==`) on character and factor vectors
+```{r}
+c('Amy','Bob','Cindy','Danny') == 'Cindy'
+```
+
+🌻 The Set Comparison Operator : `%in%`  
+```{r}
+c('Amy','Bob','Cindy','Danny') %in% c('Danny','Cindy')
+```
+
+The above is the same as ...
+```{r}
+c('Amy','Bob','Cindy','Danny') %in% c('Cindy','Danny')
+```
++ sequence in the rhs of `%in%` is not important
+
+but different from ...
+```{r}
+c('Amy','Bob','Cindy','Danny') == c('Danny','Cindy')
+```
++ `==` works element wise.  thus, the sequence in the rhs vector of is important
+
+❓ What happen if I do ...
+```{r eval=F}
+c('Amy','Bob','Cindy','Danny') == c('Cindy','Danny')
+```
+<br>
+
+##### 1.3 名稱指定 vs. 內容相等  Assignment/Equivalence  
+
+🌻 2 Notations of  Assignment : `=` 和 `<-` 
+```{r}
+Prob = c(0.1, 0.2, 0.3, 0.4)
+Value <- c(120, 100, -50, -60)
+Prob * Value
+```
++ the 2 notations are identical 
+
+🌻 Assignment (`=`) is different from Test for Eq. (`==`)  
+```{r}
+c(0.1, 0.2, 0.3, 0.4) == (1:4)/10
+```
+
+❓  What happen if you do  
+```{r eval=F}
+c(0.1, 0.2, 0.3, 0.4) = (1:4)/10
+```
+<br><hr>
+
+
+### 2. 功能與其參數 Functions & Their Arguments
+
+Most R function take vectors as input (usually the first argument.)<br>
+```{r}
+val=c(500,20,75,400)
+```
+
+summary functions produce summaries/statistics 
+```{r}
+sum(val)
+mean(val)
+```
+
+math functions produce vectors 
+```{r}
+log(val)
+sqrt(val)
+```
+
+In addition to the input vector, most R function take extra arguments for options
+```{r}
+log(val, base=10)
+```
+
+<br><p class="wwl">
+<span style="font-size:16px">`r "\U1F4A1"` Arguments of Functions：</span><br>
+&emsp; ■ To be convenient and flexible, most R functions have many arguments with <z>defaults</z><br>
+&emsp; ■ Place cursor on the function name and press F1 to see the online help<br>
+&emsp; ■ Arguments can be given either <z>by name</z> or <z>by position</z><br>
+&emsp; ■ Unnamed-arguments must be in their exact position</z><br>
+&emsp; ■ Named arguments can be placed in any order</z><br>
+</p class="wwl">
+
+```{r eval=F}
+help(log)
+```
+
+Default argument 
+```{r}
+log(1000)
+```
+
+Argument by position
+```{r}
+log(1000, 10)
+```
+
+Argument by names
+```{r}
+log(x=1000, base=10)
+```
+
+Argument by names in reverse order
+```{r}
+log(base=10, x=1000)
+```
+
+Quite often we need to cascade several functions, for example
+```{r}
+x = 10000
+mean(log(sqrt(x), base=10))
+```
+
+The <z>pipe</z> operator `%>%` would make it easier to apply a series of functions
+```{r}
+sqrt(x) %>% log(10) %>% mean
+```
+
+<br><hr>

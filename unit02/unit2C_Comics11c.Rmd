@@ -1,0 +1,226 @@
+---
+title: UNIT2Cqa：分類運算與條件機率
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: spacelab
+    css: ../etc/style.css
+---
+
+```{r echo=F, results='hide', message=FALSE, warning=FALSE}
+# Basic installation, setup & formatting.  Do not modify this code chunk.  
+rmarkdown::find_pandoc(version = '2.7.3')
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8); options(scipen=20, digits=4, width=80)
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(magrittr)
+```
+<br>
+
+
+🌻 `read.csv()` - 讀取CSV（逗號分隔值）的文件
+```{r}
+D = read.csv("data/comics1.csv")
+```
+
+<br>
+
+### 5. 計算數量與比率
+
+##### 5.1  邏輯運算式的數量與比率
+
+🌻 用 `sum()` 來計算一個邏輯向量裡面 `TRUE` 的個數 <br>
+```{r}
+sum(D$align == "Good")
+```
+<br>
+
+🌻 用 `mean()` 來計算一個邏輯向量裡面 `TRUE` 的比例 <br>
+```{r}
+mean(D$align == "Good")
+```
+<br>
+
+##### 5.2 `table()` and `prop.table()`
+
+🌻 `table()` 列出一個向量裡各不同的值出現的次數 <br>
+```{r}
+table(D$align)
+```
+<br>
+
+🌻 `prop.table()` 將計數轉換成比例 <br>
+```{r}
+table(D$align) %>% prop.table
+```
+<br>
+
+如果我們在`table()`中放入兩個變數，會發生什麼事呢? <br>
+```{r}
+table(D$align, D$sex)
+```
+<br>
+
+❓ C查看`prop.table`的線上說明(F1)，它的`margin`這個參數的作用是什麼？ <br>
+❓ Check the online help of `prop.table`. What does argument `margin` works?
+
+```{r}
+table(D$align, D$sex) %>% prop.table
+table(D$align, D$sex) %>% prop.table(1)
+table(D$align, D$sex) %>% prop.table(2)
+```
+
+<br>
+我們來練習一下, 
+
++ 資料中有多少個壞男人 ❓ 
++ 壞角色之中有多少比率是女的 ❓ 
++ 女性之中有多少比率是壞人 ❓ 
+
+<br>
+<span style="font-size:40px"> 🏆 </span>
+<span style="font-size:20px; font-family:'Arial Black'">Group Competition Round 1</span>
+<br>
+
+<span style="font-family:'Consolas'">
+1. 我們有多少個壞人角色？  2915 <br>
+2. 我們有多少個壞男性角色？ 2239 <br>
+3. 在所有角色當中，壞人的比例是多少？ 0.4021 <br>
+4. 在所有角色當中，壞男性角色的比例又是多少呢？ 0.3088 <br>
+5. 在所有男性角色中，壞人的比例是多少？ 0.4590 <br>
+6. 在所有壞角色中，男生的比例又是多少呢？ 0.7681 <br>
+7. 在哪個性別當中，中立的人比較多？ Male <br>
+8. 女性的角色比較有可能是中立的嗎？ TREU, 0.1821 > 0.1486 <br>
+</span>
+
+<br><br>
+
+
+### 6. 分類運算與比較
+
+##### 6.1 分類運算功能 `tapply()` 
+
+🌻 `tapply(value, group, fun)` applies `fun` to `value` by each distinct `group`
+```{r}
+tapply(D$align == "Neutral", D$sex, sum)
+```
+按性別計算中立的人數 
+
+```{r}
+tapply(D$align == "Neutral", D$sex, mean)
+```
+按性別計算中立的比率
+
+<br>
+我們來練習一下, 
+
+每種頭髮顏色中女性的比例分別是多少 ❓ 
+```{r}
+tapply(D$sex=="Female", D$hair, mean)
+```
+
+每種頭髮顏色之中，各有多少女性 ❓ 
+```{r}
+tapply(D$sex=="Female", D$hair, sum)
+```
+
+<br>
+<span style="font-size:40px"> 🏆 </span>
+<span style="font-size:20px; font-family:'Arial Black'">Group Competition Round 2</span>
+<br><br>
+
+
+1.在藍眼睛的角色中，男性的比例是多少？ 
+```{r}
+mean(D$sex[D$eye=="Blue"] == "Male")        # exactly 1 answer
+tapply(D$sex=="Male", D$eye=="Blue", mean)  # comparing blue to the others
+tapply(D$sex=="Male", D$eye, mean)          # comparing among all colors
+table(D$eye, D$sex) %>% prop.table(1)       # comparing among all colors !!   
+```
+
+🌷 以上四種作法都可以回答相同的問題，但是 ...  
+
++ 分析本身就是把資料變少的過程，輸出資料並不是越詳細越好
++ 產生表格通常是為了要做分類比較
++ 用兩個變數做table()會產生二維的矩陣，要在哪一個方向上轉成比例、哪一個方向上面做比較就需要先考慮清楚。 
+
+<br>
+
+2.在男性角色中，藍眼睛角色的數量是多少？
+```{r}
+tapply(D$eye=="Blue", D$sex, sum)
+```
+
+3.男性的存活比例是多少？
+```{r}
+tapply(D$alive=="Living", D$sex, mean)
+```
+
+4.哪個陣營(好人陣營 or 壞人陣營)比較有可能存活？
+Which align is more likely to stay alive?
+```{r}
+tapply(D$alive=="Living", D$align, mean)
+```
+<br>
+
+##### 6.2 分類運算與條件機率 - <z>壞人的長相</z> 
+
+5.列出在各種頭髮顏色之中壞人的人數？ 
+```{r}
+tapply(D$align=="Bad", D$hair, sum) %>% sort
+```
+
+6.列出在各種眼睛顏色之中壞人的比例？ 
+```{r}
+tapply(D$align=="Bad", D$eye, mean) %>% sort
+```
+<br><br>
+
+##### 6.3 壞人的長相 
+
+❓ 壞人最有可能有哪一種頭髮眼睛組合呢？ <br>
+❓ 哪一種頭髮眼睛組合最有可能是壞人呢？ <br>
+❓ 如果我們想要根據長相來辨識壞人，我們應該要問 ...
+
++ 壞人之中哪一種眼珠顏色的人數最多 
++ 哪一種眼珠顏色之中壞人的人數最多
++ 壞人之中哪一種眼珠顏色的比率最高 (`P[eye|bad]`) 還是
++ 哪一種眼珠顏色之中壞人的比率最高 (`P[bad|eye]`) 呢？
+
+<br>
+
+🌻 和`table`一樣，`tapply`也可以接受多於一個分類變數 
+
+我們可以算出每一種頭髮眼睛組合之中壞人的人數 ...
+```{r}
+tapply(D$align=="Bad", list(eye=D$eye, hair=D$hair), sum) 
+```
+
+棕色眼睛、黑色頭髮的壞人是最多的，所以棕眼黑髮的人比較有可能是壞人嗎 ❓ 
+
+我們也可以算出每一種頭髮眼睛組合之中壞人的比率
+```{r}
+tapply(D$align=="Bad", list(eye=D$eye, hair=D$hair), mean) 
+```
+
+所以，哪一種長相的人，最有可能是壞人呢 ❓ 
+
+
+<br><br><p class="wwl">
+<span style="font-size:16px">`r "\U1F4A1"` <b>學習重點</b></span><br>
+在上面的練習之中，我們學到了 ... <br>
+&emsp; ■ 用 `table()` 計算數量<br>
+&emsp; ■ 用 `tapply()` 做分類運算<br>
+&emsp; ■ `table`, `tapply` 和 索引的綜合運用<br>
+&emsp; ■ 分類運算與條件機率<br>
+</p class="wwl"><br>
+
+
+
+<br><br>
+
+

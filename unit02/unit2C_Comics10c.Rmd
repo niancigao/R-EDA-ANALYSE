@@ -1,0 +1,569 @@
+---
+title: UNIT2C：Comics Dataset (1)
+author: 中山大學管理學院 卓雍然
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r echo=F, results='hide', message=FALSE, warning=FALSE}
+# Basic installation, setup & formatting.  Do not modify this code chunk.  
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8); options(scipen=20, digits=4, width=80)
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(magrittr)
+```
+<br>
+
+<center>
+![DC and Marvel](fig/dc-marvel-1200.jpg){height=300}
+</center><br>
+
+
+在繼續之前，let’s have some fun! 在這程式筆記中，我們將使用漫畫人物的資料集來回顧、介紹和練習 R 的內建函數。  ( [資料來源: Kaggle.com](https://www.kaggle.com/fivethirtyeight/fivethirtyeight-comic-characters-dataset) )
+
+<br><br><hr>
+
+###  1. 讀入並檢查資料框的結構
+
+🌻 `read.csv()` - 讀取CSV（逗號分隔值）的文件
+```{r}
+D = read.csv("data/comics1.csv")
+```
+
+🌻 `nrow()` - 確認row的數量 
+
+```{r}
+nrow(D)
+```
+
+🌻 `ncol()` - 確認column的數量 
+```{r}
+ncol(D)
+```
+
+資料框之中 ...
+
++ 一個`row`又稱為一筆資料或一筆紀錄(record)，它代表一個研究對象、一個分析單位
++ 一個`column`又稱為一個欄位、變數(variables)或屬性(attributes)，它代表研究對象的某個屬性或量測值
+
+<br>
+
+🌻 `str()` - 用來檢查資料框的結構，每個column的資料種類
+```{r}
+str(D)
+```
+<br><hr>
+
+###  2. 檢查變數 
+
+🌻 `summary()` 是檢查資料框(每個column的)內容最方便的方式
+```{r}
+summary(D)
+```
+
+<p class="qiz">
+<span style="font-size:20px">`r "\U1F5FF"` QUIZ 2：</span><br>
+&emsp; ■ 這個資料框的名字是什麼?<br>
+&emsp; ■ 我們要分析的目標對象是什麼?<br>
+&emsp; ■ 我們感興趣的屬性是哪些?<br>
+&emsp; ■ 資料集有哪些是數值型的column ?<br>
+&emsp; ■ 資料集有哪些是字串型的column ?<br>
+&emsp; ■ 哪些是字串型的column是**類別** 欄位呢?<br>
+
+```{r}
+# D
+# name (角色)
+# All variable
+# appearances & year
+# name (加上下面可轉類別的變數)
+# align & eye & hair & alive & publisher & sex
+```
+
+</p class="qiz"><br>
+
+🌷 請注意，對不同資料種類的欄位，`summary()`會以不同的方式進行匯總
+
++ 對於**數值**欄位，會以**統計量**的方式回報該變數的**分佈**
++ 對於**字串**欄位，只顯示它們的種類
++ 對於**類別**欄位，會顯示各類別的分佈 (後面會詳細說明)
+<br><br>
+
+<p class="wwl">
+<span style="font-size:18px">`r "\U1F4A1"` 分佈 & 統計量</span><br>
+■ **分佈** : 是一種描述變數的方式，它描述著 ...<br>
+&emsp; ◇  變數值的變化<br>
+&emsp; ◇  也就是說，變數的值是如何分佈的?<br>
+■ **統計量** : 數值變數的某種具體特徵<br>
+&emsp; ◇  舉例來說: 平均(mean), 中位數(median), 最小值(min), 最大值(max)<br>
+■ 變數的分佈可以用兩種型式表示 :<br>
+&emsp; ◇  在數字上， 用統計量表示 或者<br>
+&emsp; ◇  以圖形上，用繪圖的方式表示<br>
+</p class="wwl"><br><br>
+
+##### 2.1 檢查數值(連續)變數
+
+🌻 `mean()`, `median`, `max`, `min()` - 取得數值變數的個別統計量
+```{r}
+c( mean=mean(D$year), median=median(D$year), 
+   max=max(D$year), min=min(D$year)  )
+```
+
+🌻 `summary` 一次獲得所有主要的統計量
+```{r}
+summary(D$year)
+```
+
+
+🌻 `hist()` - 畫出數值變數的分佈<br>
+🌻 `log()` 當分佈很不均勻時，對數函數有助於壓制極端值的視覺衝擊
+```{r fig.height=1.8, fig.width=6}
+par(mfrow=c(1,2), mar=c(2,2,3,2), cex=0.6)  # 2 plots in a row, smaller font
+hist(D$year, main="year")
+hist(D$appearances, main="appearances")
+
+log(D$appearances,10) %>% hist(main="log(appear.)")
+#出現1、10、100、1000次
+```
+<br><br>
+
+##### 2.2 檢查類別(離散型)變數
+
+🌻 `table()` 列出並各類別的個數
+```{r}
+table(D$align)
+```
+請注意，它是依類別名稱的字母順序排列<br> 
+
+🌻 `barplot()` 視覺化離散變數的分佈
+```{r fig.height=1.8, fig.width=4}
+par(mfrow=c(1,1), cex=0.6)  # 1 plots in a row
+table(D$align) %>% barplot(main="align")
+```
+
+<br><p class="qiz">
+<span style="font-size:20px">`r "\U1F5FF"` QUIZ 2.2</span><br>
+&emsp; ■ **分佈**是什麼意思?<br>
+&emsp; ■ 我們如何檢查 **數值** 變數的分佈?<br>
+&emsp; ■ 我們如何檢查 **類別** 變數的分佈？<br>
+&emsp; ■ 我們可以以**統計量**或**圖形**檢查變數，哪種方式比較好呢?<br>
+&emsp; ■ ...<br>
+&emsp; ■ 以統計量檢查變數 `appearances`<br>
+&emsp; ■ 以圖形方式檢查變數 `year` <br>
+&emsp; ■ 以統計量檢查變數 `sex` <br>
+&emsp; ■ 以圖形方式檢查變數 `eye`<br>
+
+```{r}
+# 指散佈（在一定的地區內）可看出大致資料形狀，是一種描述變數的方式
+
+#檢查數值(連續)變數:mean(), median, max, min(),summary(),hist()
+#檢查類別(離散型)變數:table(),barplot()
+
+# 數值大部分利用統計量 用summary() 也可畫箱型圖等
+# 類別可畫圖詮釋 用table、barplot、圓餅圖等
+# 每種變數有個別適合的方法，最好呈現方式因人而異(分數值、類別考慮)
+
+summary(D$appearances)  #fivenum(D$appearances)
+
+hist(D$year,xlab = 'year',main = 'year')
+
+table(D$sex)
+
+table(D$eye)
+barplot(table(D$eye),main = 'eye')
+
+```
+
+</p class="qiz"><br><br><hr>
+
+
+###  3. 字串(Character) vs. 因素(Factor) 
+
+在R裡面，原始資料之中的字串欄位可以被儲存為因素(`factor`)或字串(`character`)變數，
+這兩種變數之間可以相互轉換。 好比說，`align`這個欄位一開始是被當作字串變數讀入， 
+我們可以用以下的指令將其轉變為一個具有3個不同的類別(<z>levels</z>)的因素變數`f.align`
+
+🌻 `factor()` - 將字串向量轉為因素向量
+```{r}
+D$f.align = factor(D$align, levels=c("Good","Neutral","Bad"))
+```
+
+有需要的話，我們可以指定因素變數之中各類別(`levels`)的排列順序
+```{r fig.height=1.8, fig.width=7.5}
+par(mfrow=c(1,2), cex=0.7)  
+table(D$align) %>% barplot(main="align")
+table(D$f.align) %>% barplot(main="f.align")
+```
+
+我們將 `eye`也轉為因素變數
+```{r}
+D$eye = factor(D$eye)
+```
+
+現在，它變成了 8 個類別(levels)的因素變數
+```{r}
+str(D$eye)
+```
+
+🌻 `level(x)` 列出因素變數`x`之中的所有類別
+```{r}
+levels(D$eye)
+```
+
+若我們在 `factor()` 中沒有指定 `levels`時，各類別將以英文字母的順序排列
+```{r}
+table(D$eye) 
+```
+
+🌻 `sort()` 對向量進行(升冪)排列
+```{r fig.height=1.8, fig.width=6}
+par(mfrow=c(1,1), cex=0.7)  
+table(D$eye) %>% sort(dec=T) %>% barplot
+```
+
+```{r}
+summary(D)
+```
+🌷 在 `summary()` 中，因素 (或類別) 變數最多只會列出 6 筆資料，其他則歸類為 Other 。
+
+<p class="wwl">
+<span style="font-size:20px">`r "\U1F4A1"`字串 (Character) vs. 因素 (Factor)</span><br>
+■ 字串和因素都可以用於表示類別變數。<br>
+■ 雖然儲存和呈現的方式不盡相同，但大多數的情況兩者可以交換使用。<br>
+■ 某些類別 columns 可能會以字串的形式被讀入。<br>
+■ 所以，我們應該檢查每一 column 的變數型態。<br>
+■ 通常，我們只需維持它們的原樣，在必要時將它們轉換型態即可。<br>
+</p class="wwl"><br><br><hr>
+
+
+### 4. 排序 (Order) 和 篩選 (Filter)
+
+如果我們想要列出出現次數(`appearances`)最多的10個漫畫人物 ... <br> 
+
+##### 4.1 Sorting 和 Ordering 的區別
+
+我們可以以降冪的方式(`decreasing=T`)對`D$appearances`進行`sort()`並
+使用`head()`從向量中挑選出最前面10個值
+
+```{r}
+sort(D$appearances, decreasing=T) %>% head(10)
+```
+這樣我們可以看到`D$appearances`之中最大的10個數字，但 ... 他們是誰呢？<br>
+
+
+🌻 `sort(x)` 對`x`的內容進行排序並返回結果   
+🌻 `order(x)` 依`x`的內容排序建立一個索引向量，(用來重新排序其他的物件)
+```{r}
+D[order(D$appearances,decreasing=T), c("year","appearances","name")] %>% head(10)
+```
+如此我們可以按順序看到前10名最常出現的角色的出現年分(`year`)、出現次數(`appearances`)和名稱 (`name`)。<br>
+
+
+##### 4.2 有條件的進行篩選 (Order)
+
+🌻 `subset(x, 條件, select=y)` 依照所給定的條件篩選row，並依欄位名稱選擇column
+```{r}
+d = subset(D, alive=="Deceased" & sex=="Female", select=c("year","appearances","name"))
+d[order(d$appearances, decreasing=T), ] %>% head(10)
+```
+以上，我們可以看到前10名出現次數最多的已故女性角色。
+
+
+<br><p class="qiz">
+<span style="font-size:20px">`r "\U1F5FF"` QUIZ 4.2 </span><br>
+ ■ 列出出現次數為前 10 名的金髮綠眼女性角色<br>
+ ■ 列出 5 個最早出現的紅髮、紅眼男性的 `year`, `publisher`, `align`, 和 `name`<br>
+</p class="qiz">
+
+```{r}
+d = subset(D, hair=="Blond" & eye=="Green" & sex=="Female", select=c("year","name",'appearances'))
+d[order(d$appearances, decreasing=T), ] %>% head(10)
+```
+
+```{r}
+d = subset(D, eye=="Red" & hair=="Red" & sex=="Male", 
+           select=c('year',"publisher","align","name"))
+d[order(d$year, decreasing=T), ] %>% tail(10)
+```
+
+<br><hr>
+
+### 5. 計數和比例
+
+
+📋 為每個程式碼區塊寫下註解，將其作為自己的筆記本。<br><br>
+
+
+##### 5.1 使用邏輯運算式計算數量和比例
+
+🌻 用 `sum()` 來計算一個邏輯向量裡面 `TRUE` 的個數
+```{r}
+#好人的數量
+sum(D$align == "Good")  
+
+```
+<br>
+
+🌻 用 `mean()` 來計算一個邏輯向量裡面 `TRUE` 的比例
+```{r}
+#好人的比例
+mean(D$align == "Good")
+
+```
+<br>
+
+##### 5.2 `table()`和`prop.table()`
+
+🌻 `table()` 列出一個向量裡各不同的值出現的次數
+```{r}
+#好人壞人中立的人數
+table(D$align)
+
+```
+<br>
+
+🌻 `prop.table()` 將計數轉換成比例
+```{r}
+#壞人好人中立的比例
+table(D$align) %>% prop.table
+```
+<br>
+
+如果我們在`table()`中放入兩個變數，會發生什麼事呢?
+```{r}
+#用align 和sex 分類出各人數
+table(D$f.align, D$sex)
+```
+<br>
+
+查看`prop.table`的線上說明(F1)，它的`margin`這個參數的作用是什麼？
+```{r}
+#用align 和sex 分類出各人數比例 (總為1)
+#align 且 sex 的比例
+table(D$f.align, D$sex) %>% prop.table
+
+#用align 和sex 分類出各人數比例 (各row加總為1)
+#align 下 sex 的比例
+table(D$f.align, D$sex) %>% prop.table(1)
+
+#用align 和sex 分類出各人數比例 (各column加總為1)
+#sex 下 align 的比例
+table(D$f.align, D$sex) %>% prop.table(2)
+
+#margin: 1 indicates rows
+#        2 indicates columns
+#        c(1, 2) indicates rows and columns.
+
+```
+
+<br>
+我們來練習一下, 
+
++ 資料中有多少個壞男人 ❓ 
+```{r}
+table(D$f.align, D$sex)
+table(D$f.align, D$sex)[3,2]
+
+```
++ 壞角色之中有多少比率是女的 ❓ 
+```{r}
+table(D$f.align, D$sex) %>% prop.table(1)
+J = table(D$f.align, D$sex) %>% prop.table(1)
+J[3,1]
+```
++ 女性之中有多少比率是壞人 ❓ 
+```{r}
+table(D$f.align, D$sex) %>% prop.table(2)
+W = table(D$f.align, D$sex) %>% prop.table(2)
+W[3,1]
+```
+
+<br>
+<span style="font-size:40px"> 🏆 </span>
+<span style="font-size:20px; font-family:'Arial Black'">Group Competition Round 1</span>
+<br><br><br>
+
+### 6. 分類統計與分群運算
+
+##### 6.1 分類統計
+
+要回答上面最後兩個問題，分別需要做兩次`table()`； 實際上，我們有有更簡便的方法
+
+🌻 `tapply(value, group, fun)`依據`group`對`value`做`fun`
+```{r}
+tapply(D$align == "Neutral", D$sex, sum)
+```
+按性別計算中立的人數
+
+```{r}
+tapply(D$align == "Neutral", D$sex, mean)
+```
+按性別統計中立的人的比例
+
+<br>
+我們來練習一下, 
+
++ 每種頭髮顏色中女性的比例分別是多少 ❓ 
+```{r}
+table(D$hair,D$sex) %>% prop.table(1)
+tapply(D$sex=='Female', D$hair, mean)
+```
++ 女性之中，每種頭髮顏色各有多少人 ❓ 
+```{r}
+
+table(D$hair,D$sex)
+tapply(D$sex=='Female', D$hair, sum)
+```
+
+<br>
+<span style="font-size:40px"> 🏆 </span>
+<span style="font-size:20px; font-family:'Arial Black'">Group Competition Round 2</span>
+<br><br><br>
+
+##### 6.2 順序統計
+
+商務中常有一些不連續但有次序的變數，像是年代(`decade`)
+```{r}
+D$decade = (D$year - 1900) %/% 10
+table(D$decade)
+```
+
+我們可以依decade算出中性角色的比例
+```{r}
+v = tapply(D$align == "Neutral", D$decade, mean) %>% round(3); v
+```
+如果把這些數據繪製為圖形，將更容易觀察出趨勢。<br>
+
+
+🌻 `plot(x, y, type)` 以不同的方式繪製x和y方向的數據
+
++ `type="p"` 散點圖（預設值）
++ `type="l"` 線形圖
++ `type="b"` 帶標記的線圖
++ 有關更多線型和參數，請參見線上說明（`F1`）
+
+```{r fig.height=4, fig.width=6.5}
+# 繪製圖形序列以查看趨勢
+par(mfcol=c(2,2), mar=c(3,3,2,1), cex=0.7)
+v %>% barplot()               # 直條圖
+plot(names(v), v)             # 散點圖
+plot(names(v), v, type='l')   # 線形圖
+plot(names(v), v, type='b', ylim=c(0,0.25)) # 帶標記的從零開始的線圖
+```
+
+以上哪以種方式比較容易看見正確的趨勢呢？ ANS:線形圖
+
+<br>
+
+##### 6.3 按分類排列的序列
+
+`tapply(value, group, function)`可以一次接受多個分組變數，如
+```{r}
+v = tapply(D$align=="Bad", list(D$sex, D$decade), mean) %>% round(3); v
+```
+
+🌻 `lines()`在現有繪圖中添加一條線。例如，我們可以比較不同性別的壞角色比例的趨勢，如下所示。
+```{r fig.height=2.5, fig.width=4}
+par(mfrow=c(1,1), mar=c(3,3,2,1), cex=0.7)
+plot(colnames(v),  v[1,], type="l", ylim=c(0,0.6), col="red", lwd=2,
+     main = "按性別劃分的壞角色比例")                     # 添加標題
+lines(colnames(v), v[2,], col="blue", lwd=2)              # 添加第二條線
+abline(h=seq(0,0.6,0.1), v=seq(3,10,1), col='lightgray')  # 添加格線
+
+
+```
+
+確定前三種頭髮顏色...
+```{r}
+h3 = table(D$hair) %>% sort %>% tail(3) %>% names; h3
+```
+
+看看前三種頭髮顏色的比例如何隨時間變化。
+```{r fig.height=3, fig.width=4}
+par(mfrow=c(1,1), mar=c(3,3,2,1), cex=0.7)
+
+v = tapply(D$hair=="Black", D$decade, mean)
+plot(names(v),v,type='l',lwd=2,col="black",ylim=c(0,0.45),
+     main="前三種頭髮顏色的比例隨時間的變化")
+ 
+v = tapply(D$hair=="Brown", D$decade, mean)
+lines(names(v),v,type='l',lwd=2,col="brown")
+
+v = tapply(D$hair=="Blond", D$decade, mean)
+lines(names(v),v,type='l',lwd=2,col="gold")
+
+abline(h=seq(0,0.5,0.1), v=seq(3,10,1), col='lightgray') 
+```
+
+
+<br><p class="qiz">
+<span style="font-size:20px">`r "\U1F5FF"` QUIZ 6.3 </span><br>
+現在輪到你了。請製作圖表以... <br>
+ ■ 檢查前三種眼睛顏色的比例趨勢<br>
+ ■ 依據`漫畫公司`跟`性別`去比較`存活機率`的趨勢<br>
+</p class="qiz"><br>
+
+```{r echo=F, results='hide'}
+e3 = table(D$eye) %>% sort %>% tail(3) %>% names; e3
+```
+
+```{r fig.height=3, fig.width=4}
+par(mfrow=c(1,1), mar=c(3,3,2,1), cex=0.7)
+
+v = tapply(D$eye=="Blue", D$decade, mean)
+plot(names(v),v,type='l',lwd=2,col="blue",ylim=c(0,0.6),
+     main="Fractions of the Top3 Eye Colors by Decades")
+
+v = tapply(D$eye=="Brown", D$decade, mean)
+lines(names(v),v,type='l',lwd=2,col="brown")
+
+v = tapply(D$eye=="Green", D$decade, mean)
+lines(names(v),v,type='l',lwd=2,col="green")
+
+abline(h=seq(0,0.5,0.1), v=seq(3,10,1), col='lightgray')
+
+#藍有下降的趨勢，棕和綠整體算緩慢成長，不過還是藍棕比例佔大宗
+
+```
+<br> 
+
+```{r echo=F}
+
+#paste0:去掉所有分隔符號
+D$pub_sex = paste0(D$publisher, ".", D$sex)
+mx = tapply(D$alive=="Living", list(D$decade, D$pub_sex), mean)
+mx
+
+```
+
+```{r  fig.height=3, fig.width=5.5}
+par(mfrow=c(1,1), mar=c(3,3,2,1), cex=0.6)
+
+cols = c("orange","green","magenta","blue")
+ltys=c(1,1,3,3)
+
+matplot(mx[-1,],type='l',lwd=2,col=cols, xaxt="n", ylim=c(0.55,0.91), lty=ltys,
+        main = "Ratios of living characters by publisher and sex")
+
+axis(1,at=1:8, labels=4:11)
+
+abline(h=seq(0.6,0.9,0.1), v=1:8, col='lightgray', lty=3)
+
+legend('bottom',colnames(mx),col=cols,lwd=2,horiz=T,bty='n',lty=ltys)
+
+#legend:圖例
+#matplot:用矩陣的列畫圖
+#xaxt='n':使X軸消失(不然下標會重疊)
+
+#dc.female、dc.male整體而言存活率上升
+#mar.female、mar.male整體而言算先下降再回升持平
+#整體存活趨勢在後期都有明顯上升
+
+```
+
+<br><br><hr>

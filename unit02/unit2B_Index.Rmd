@@ -1,0 +1,301 @@
+---
+title: UNIT2B：索引 (Index)
+author: Tony Chuo, NSYSU
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+---
+
+```{r  echo=F, results='hide', message=FALSE, warning=FALSE}
+# Basic installation, setup & formatting.  Do not modify this code chunk.  
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8); options(scipen=20, digits=4, width=90)
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(magrittr)
+```
+<br><hr>
+
+###  1. 向量(一維)的索引  Vector (1-dim) Index
+
++ We need index to access specific elements within collective objects
++ In R, indexes are specified in angle baskets. Ex.,
+  + `x[5]` take the 5th element in `x`
+  + `x[c(2,5)]` takes the 2nd and the 5th elements in `x`
+  + `x[2:5]` takes the 2nd, 3rd, 4th and the 5th elements in `x`
++ Vector is one dimensional, so it need only one index
++ Matrix and Data Frame are two dimensional.  They need two index.
++ There're three type of index, as will be elaborated below
+<br>
+
+First, let's define some vectors.
+```{r}
+freq = c(3L, 5L, 1L, 1L, 3L)                # integer vector
+amount = c(100, 168, 180, 280, 199)         # numeric
+member = c(FALSE, TRUE, FALSE, TRUE, TRUE)  # logical
+name = c("Amy", "Bob", "Cindy", "Danny", "Edward")  # character
+gender = as.factor( c("F", "M", "F", "M", "M") )    # factor
+class = as.factor(c('A','B','A','B','A'))           # factor
+```
+<br>
+
+##### 1.1 位置(整數)索引 Position (Integer) Index
+🌻 Position indexes take the format of <z>integer vector</z>  
+```{r}
+freq[c(1,5)]
+gender[2:4]
+gender[5]      
+```
+An atomic object is equivalent to an vector of length 1
+
+```{r}
+i = c(1:3, 5)   # we can define an integer vector object 
+amount[i]       # and use it as an position index 
+```
+
+Index can be used to <z>select</z> ...
+```{r}
+amount[ c(1,2) ]
+```
+
+<z>reproduce</z> ...
+```{r}
+amount[ c(1,2,2,3,3,3,4,4,4,4) ] 
+# an position index may be longer than the targeted vector
+```
+
+or <z>reorder</z> elements in the targeted object
+```{r}
+amount[ c(5,4,3,2,1)  ]
+```
+<br>
+
+
+##### 1.2 名稱(文字)索引 Name (Character) Index
+
+`amount` is an unnamed numeric vector 
+```{r}
+amount
+```
+
+```{r}
+names(amount)
+```
+
+We can assign a name to each element of an collective objects
+```{r}
+names(amount) =  c("Amy", "Bob", "Cindy", "Danny", "Edward")
+```
+
+```{r}
+amount
+```
+
+Now `amount` becomes an **named** numeric vector, and we can access its elements by names.
+
+🌻 A name index is an <z>character vector</z> 
+```{r}
+i = c("Bob", "Cindy")
+amount[ i ]
+```
+<br>
+
+
+##### 1.3 條件(邏輯)索引 Conditional (Logical) Index
+🌻 Conditional indexes are <z>logical vectors</z> (whose <z>length equal</z> to their targeted vectors.)  
+```{r}
+freq[ c(T,T,F,F,T) ]
+```
+
+🌻 Logical indexes let us select elements <z>by conditions</z>  
+```{r}
+amount[ freq <= 2 ]
+
+```
+
+<br><p class="qiz">
+<span style="font-size:24px">`r "\U1F5FF"` QUIZ：</span><br>
+With the vectors defined below ...
+</p class="qiz">
+```{r}
+noBuy = c(3L, 5L, 1L, 1L, 3L)                       # Integer
+height = c(175, 168, 180, 181, 169)                 # numeric
+isMale = c(FALSE, TRUE, FALSE, TRUE, TRUE)          # logical
+name = c("Amy", "Bob", "Cindy", "Danny", "Edward")  # character
+gender = factor( c("F", "M", "F", "M", "M") )       # factor
+skin_color = factor( c("black", "black", "white", "yellow", "white") )  # factor
+```
+<br>
+Use index and math functions to answer the following questions ...
+
+<span style="font-size:16px">`r "\U1F5FF"`</span>:
+list the name of males
+```{r}
+name[isMale]
+```
+
+<span style="font-size:16px">`r "\U1F5FF"`</span>:
+list the names of those who higher than 180
+```{r}
+name[height>=180]
+```
+
+<span style="font-size:16px">`r "\U1F5FF"`</span>:
+list the names of those who higher than 180 and skin color is "yellow" 
+```{r}
+name[height>=180 & skin_color=='yellow']
+```
+
+<span style="font-size:16px">`r "\U1F5FF"`</span>:
+calculate the average height of males
+```{r}
+mean( height[gender == "M"] )
+```
+
+<span style="font-size:16px">`r "\U1F5FF"`</span>:
+calculate the total number of buys (`noBuy`) by females
+```{r}
+sum(noBuy[isMale==FALSE])
+```
+
+<span style="font-size:16px">`r "\U1F5FF"`</span>:
+count the number of white female
+```{r}
+sum(skin_color=='white' & gender=='F')
+```
+
+<br><hr>
+
+### 2. 資料框(二維)索引 Indexing Data Frames
+
+##### 2.1 資料框的優點 The Benefit of Data Frame
+
+Data frame is the most common and useful data structure.  Usually  
+
++ each row of a data frame represents an subject (unit of analysis) and  
++ each column represents an an attribute or measure of interest.
+<br>
+
+```{r}
+df = data.frame(
+  noBuy = c(3L, 5L, 1L, 1L, 3L),
+  height = c(175, 168, 180, 181, 169),
+  isMale = c(FALSE, TRUE, FALSE, TRUE, TRUE),
+  name = c("Amy", "Bob", "Cindy", "Danny", "Edward"),
+  gender = factor( c("F", "M", "F", "M", "M") ),
+  skin_color = factor( c("black", "black", "white", "yellow", "white")),
+  stringsAsFactors=FALSE
+  )
+```
+
+Data frame is easier to <z>examine</z> ...
+```{r}
+df
+```
+
+to <z>select</z> ...
+```{r}
+subset(df, isMale & skin_color == "black")
+```
+
+to <z>count</z>
+```{r}
+table(df$gender)   #分類技術
+```
+
+to <z>summaries</z>
+```{r}
+mean(df$height)
+```
+
+to <z>summaries/count by groups</z>
+```{r}
+tapply(df$height, df$gender, mean)  #中間當作分類且統計
+```
+<br>
+
+##### 2.2 資料框的索引
+
+Data Frames are a two-dimensional objects, so they take two indexes: 
+
++ between the angle baskets and separated by comma - `df[ row_idx, col_idx ]`
++ usually row are selected by condition (logical index)
++ column are selected by name (name index)
+<br>
+
+We can index data frame by all three forms of index: 
+
++ Positional/Integer Index: `df[c(1,2), c(2,3)]` 
++ Name/Character Index: `df[c(1,2), c("noBuy","height")]` 
++ Condition/Logical Index: `df[df$gender=="M, c("noBuy","height")]` 
+<br>
+
+and some others extra indexing forms:  
+
++ Empty Index:`df[c(1,2), ]` selects all columns (rows)
++ column name (`$`): `df$name` selects a specific column 
++ `subset()` & `filter()`：
+    + `subset(df, height<175 & isMale)`
+    + `subset(df, height<175 & isMale, name)`
+    + `subset(df, height<175 & isMale)$name`
+    + `subset(df, height<175 & isMale, c(name, noBuy))`
+<br>
+
+Below are some examples ...
+```{r}
+df[c(1,2), c(2,3)]
+df[c(1,2), ]
+df[df$height < 175 & df$isMale, ]
+df[df$height < 175 & df$isMale, "name"]
+df$name[df$height < 175 & df$isMale]
+
+subset(df, height<175 & isMale)
+subset(df, height<175 & isMale, name)
+subset(df, height<175 & isMale)$name
+subset(df, height<175 & isMale, c(name, noBuy))
+```
+
+<br><br><p class="qiz">
+<span style="font-size:24px">`r "\U1F5FF"` QUIZ：</span><br>
+Annotate the function of each underlying code chunks as remarks  ...<br>
+</p class="qiz">
+
+For an example
+```{r}
+df$name[df$isMale] # names of all males  
+```
+
+```{r}
+df[df$height > 180 , "name"] # 身高大於180的名字
+```
+
+```{r}
+subset(df, height > 170 & !isMale)$name # 身高大於170且不是男性的名字
+```
+
+```{r}
+mean(df$height[df$isMale]) # 男性身高的平均
+```
+
+```{r}
+df$height[!df$isMale] %>% mean # 取不是男性的身高再取平均
+```
+
+```{r}
+sum( subset(df, !isMale)$noBuy ) # 不是男性所nobuy的總和
+```
+
+```{r}
+subset(df, skin_color == "white" & !isMale ) %>% nrow #白皮膚且不是男性的橫列數量
+```
+
+```{r}
+sum(df$skin_color == "white" & !df$isMale ) #白皮膚且不是男生的數量 
+```
+
+<br><br><br><hr>
+
