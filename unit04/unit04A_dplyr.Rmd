@@ -1,0 +1,260 @@
+---
+title: UNIT4A：資料框處理套件`dplyr`
+author: Tony Chuo, NSYSU
+date: "`r Sys.time()`"
+output: 
+  html_document: 
+    css: ../etc/style.css
+    highlight: pygments
+    theme: spacelab
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r echo=F, results='hide', message=FALSE, warning=FALSE}
+# Installation, setup & formatting. Do not modify this code chunk.  
+rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8); options(scipen=20, digits=4, width=90)
+if(!require(pacman)) install.packages("pacman")
+if(!require(dplyr)) install.packages("dplyr")
+if(!require(tidyr)) install.packages("tidyr")
+if(!require(ggplot2)) install.packages("ggplot2")
+options(scipen=20, digits=4, width=80, tibble.print_min=4)
+rmarkdown::find_pandoc(version = '2.7.3')
+```
+
+<br>
+<z>學習重點</z>：使用`dplyr`套件做資料框整理
+<br>
+
+載入套件與資料
+```{r message=FALSE, warning=FALSE}
+pacman::p_load(dplyr,tidyr,ggplot2)
+D = readRDS('data/counties.rds')
+```
+<br>
+
+### 1. 資料轉換 
+```{r}
+class(D)  # 列出物件的資料結構
+```
+`tbl_df` 可以看成加強版的 `data_frmae`；原有資料框的操作之外，它有一些附加的功能 
+
+🌻 <z>`glimpse`</z>  加強版的`str`
+```{r}
+glimpse(D)
+str(D)
+
+```
+
+🌞 `D` : 全美國3,138個郡(county)的統計資料
+
+🌻 <z>`select()`</z>  選擇欄位(變數) 
+```{r}
+D %>% select(state,county,population,unemployment)
+```
+
+```{r}
+D1 = D %>% select(state,county,population,unemployment)
+```
+
+🌻 <z>`arrange()`</z>  重新排列資料(rows) 
+```{r}
+D1 %>% arrange(population) %>% head
+# D1[order(D1$population),] %>% head
+```
+
+```{r}
+D1 %>% arrange(desc(population)) %>% head   # 降冪排列
+# D1[order(-D1$population),] %>% head
+```
+
+<br>
+❓ 請列舉這幾個功能的主要異同 `sort()`, `order()` and `arrange()`?  
+<br>
+```{r}
+
+#sort是直接對向量排序，返回原數值
+
+#order先對數值排序，然後返回排序後各數值的索引
+#order等同於sort(data)排序
+
+#arrange是dplyr包中的，針對數據框按列排序，仍返回數據框
+
+```
+
+🌻 <z>`filter()`</z>  篩選資料
+```{r}
+D1 %>% 
+  filter(state == "New York", unemployment < 8) %>% 
+  arrange(desc(population))
+```
+
+🌻 <z>`mutate()`</z> : 定義新欄位
+```{r}
+D1 %>% 
+  mutate(unempRate = 100 * unemployment/population) %>%
+  arrange(desc(unempRate)) %>% 
+  head(4)
+```
+
+以上的這些功能用我們已經學過的R內建功能(配合索引)也都做得到，所以為什麼還要學`dplyr`呢？ 🤔 <br>
+
+🌞 `dplyr`的好處在於:
+
++ 跟人類語言(英文)比較接近
++ 可以一次產生或者選擇很多個變數 
++ 也可以一次使用很多個條件做排序或者篩選
++ 很方便配合`%>%`使用，做出比較複雜或者步驟比較多的資料裝配線 
+
+<br><br>
+
+### 2. 資料彙總
+
+🌻 <z>`count()`</z>  分類計算數量或加總 
+```{r}
+count(D)             # 總資料筆數
+```
+
+```{r}
+count(D, state)      # 各州的資料筆數 No. Counties (tibble資料框)
+# table(D$state) (資料框變向量)
+```
+
+`count()` 可以說是加強版的 `table()`
+```{r}
+D %>% count(state, wt=population, sort=T)
+
+# wt = sum
+# sort=T 由大到小
+
+```
+With the `wt` and `sort` arguments, it can 
+
++ sums `population` by `state`'s
++ and sorts the results in descending order
+
+in a single line of code. <br>
+
+🌻 <z>`summarise()`</z> 資料彙總，可以一次定義很多個彙總值，
+```{r}
+D %>% summarise(
+  totalPop = sum(population),
+  avgPop = mean(population)
+  )
+# sum(D$population)
+# mean(D$population)
+```
+
++ 等號的右邊必須要是一個單值(算出單值的運算式).  
+
+🌻 <z>`group_by() %>% summarise()`</z> 分類(群)彙總 
+```{r}
+D1 %>% group_by(state) %>% summarise(
+  totalPop = sum(population),
+  avgPop = mean(population)
+  ) %>% 
+  arrange(desc(avgPop))
+
+```
+<br>
+
+❓ 我們之前有學過用 tapply()` 做分群運算，跟相比較 `group_by() %>% summarise()`有甚麼好處呢?  <br>
+```{r}
+#group_by()函數運行的结果是一個tibble對象。我們可以對運行结果繼續進行其他的數據操作。结合使用 %>% summarise()，代碼的可讀性也非常好
+
+#tapply()由factor給出的向量子集要再自己轉成資料框，不過group_by要換型態就沒tapply()容易了
+
+```
+
+跟 `tapply()` 一樣，我們也可以一次 `group_by` 很多個分群變數 
+```{r}
+D %>% group_by(state, metro) %>% summarise(
+  totalPop = sum(population),
+  avgPop = mean(population)
+  ) %>% 
+  arrange(desc(avgPop))
+
+#group_by()改變結構(97筆記錄還是50群)不改變內容
+```
+
+🌷 但是 ...
+
++ 每一次 `summarise()` 只會自動去除<z>最後一個</z>分群變數
++ 殘留的分群變數有時可以繼續使用，有時可能會帶來麻煩
++ 不再需要的分群變數最好用 `.groups="drop"` 去除掉
+
+<br>
+
+🌻  <z>`top_n(x, n, wt)`</z> select the `top-n` rows by `wt` from `x`
+```{r}
+# select from D1 the three rows that has the largest populations 
+D1 %>% top_n(n=3, wt=population)
+```
+
+```{r}
+# select from each `state` the three rows that has the largest populations 
+group_by(D1, state) %>% top_n(3, population)
+```
+
+❓ 上面兩段程式的差別在哪裡呢？
+<br>
+```{r}
+#第一個是在D1中抓前三個最多人數的行
+#第二個是在分成50州的情況下各抓前三個最多人數的郡
+
+```
+<br><br>
+
+### 3. 更靈活的語法 Select, Transmute and Rename 
+
+`select()` 可以選擇一個<z>範圍</z>的欄位
+```{r}
+D %>% select(state, county, drive:work_at_home)
+```
+
+也可以用字串比對做選擇，如 `starts_with`, `ends_with` or `contains` 
+```{r}
+D %>% select(state, county, contains("work"))
+# D %>% select(state, county, starts_with("work"))
+```
+
+也可以刪去某些欄位
+```{r}
+D %>% select(-contains("work")) %>% ncol
+```
+
+`names()` 列出所有欄位名稱 
+```{r}
+names(D1)
+```
+
+🌻 <z>`rename()`</z> 變更欄位名稱
+```{r}
+D1 %>% rename(unemp = unemployment) %>% head(3)
+```
+
+`select()`可以同時對多個欄位做選擇、排序和變更名稱
+```{r}
+D1 %>% select(state, county, unemp = unemployment, population) %>% head(3)
+```
+
+🌻 <z>`transmute()`</z>  結合`select()`和`mutate()`的功能，可以同時做欄位選擇和定義新欄位
+```{r}
+D %>% transmute(state, county, fracM = men/population)
+```
+
+四個欄位功能的比較
+```{r}
+data.frame(
+  function_name = c("select()","mutate()","rename()","transmute()"),
+  unselected_columns = c("removed","reserved","reserved","removed"),
+  make_new_columns = c("no","yes","no","yes")
+  )
+```
+
+<br><br><hr>
+
+
